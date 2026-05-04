@@ -1,8 +1,8 @@
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  DATA â€” Add/edit missions here
+// ═══════════════════════════════════════════════════════════════
+//  DATA — Add/edit missions here
 //  Each DLC has: id, name, missions[]
 //  Each mission: name, date, thumb (URL or local path), tags[], brief, civilians[], suspects[], evidence[]
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 function mission(name, tags = [], options = {}) {
   return {
     name,
@@ -61,7 +61,7 @@ const DATA = [
   },
   {
     id: "los_suenos",
-    name: "Los SueÃ±os",
+    name: "Los Sueños",
     missions: [
       mission("Hunger Strike", ["gang"], { date: "October 6, 2025", thumb: "assets/missions/Hunger_Strike.webp" }),
       mission("Stolen Valor", ["kidnapping"], { date: "September 30, 2025", thumb: "assets/missions/Stolen_Valor.webp" })
@@ -80,16 +80,16 @@ const DATA = [
     id: "others",
     name: "Others",
     missions: [
-      mission("SecretEnd - Prison", ["secret"], { date: "AprÃ¨s le 4 septembre 2028", thumb: "assets/missions/Secret_prison.webp"}),
-      mission("SecretEnd - Appart", ["secret"], { date: "AprÃ¨s le 4 septembre 2028" }),
+      mission("SecretEnd - Prison", ["secret"], { date: "Après le 4 septembre 2028", thumb: "assets/missions/Secret_prison.webp"}),
+      mission("SecretEnd - Appart", ["secret"], { date: "Après le 4 septembre 2028" }),
       mission("Commissariat", ["secret"], { thumb: "assets/missions/LSPD_HQ.webp" })
     ]
   }
 ];
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 //  RENDER
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 const modalBg = document.getElementById('modal-bg');
 const modal = document.getElementById('modal');
 const modalClose = document.getElementById('modal-close');
@@ -277,7 +277,7 @@ function applyTagColor(element, tag) {
 function refreshRenderedTagColors() {
   document.querySelectorAll('.tag').forEach(tagElement => {
     const tagText = tagElement.querySelector('span')?.textContent || tagElement.textContent;
-    applyTagColor(tagElement, normalizeTagValue(tagText.replace('Ã—', '')));
+    applyTagColor(tagElement, normalizeTagValue(tagText.replace('×', '')));
   });
   document.querySelectorAll('.filter-tag input').forEach(input => {
     applyTagColor(input.closest('.filter-tag'), input.value);
@@ -593,18 +593,18 @@ function getEvidenceLabel(evidence) {
 }
 
 function getEvidenceDescription(evidence) {
-  return typeof evidence === 'object' && evidence?.desc ? evidence.desc : '// Aucun dÃ©tail supplÃ©mentaire';
+  return typeof evidence === 'object' && evidence?.desc ? evidence.desc : '// Aucun détail supplémentaire';
 }
 
 function renderEvidencePreview(evidence) {
-  evidencePreview.textContent = evidence ? getEvidenceDescription(evidence) : '// Aucune preuve sÃ©lectionnÃ©e';
+  evidencePreview.textContent = evidence ? getEvidenceDescription(evidence) : '// Aucune preuve sélectionnée';
 }
 
 function renderEvidenceViewer(mission) {
   clearElement(evidenceList);
   const evidence = mission.evidence || [];
   if (evidence.length === 0) {
-    evidenceList.appendChild(makeTextElement('div', 'intel-empty', '// Aucune preuve enregistrÃ©e'));
+    evidenceList.appendChild(makeTextElement('div', 'intel-empty', '// Aucune preuve enregistrée'));
     renderEvidencePreview(null);
     return;
   }
@@ -647,19 +647,19 @@ function renderQuickLinks(mission, dlc) {
       .filter(entry => (entry.mission.tags || []).some(tag => missionTags.has(tag.toLowerCase())))
       .slice(0, 5)
       .forEach(entry => {
-        links.push(makeQuickLink(`Mission liÃ©e: ${entry.mission.name}`, () => openModal(entry.mission, entry.dlc)));
+        links.push(makeQuickLink(`Mission liée: ${entry.mission.name}`, () => openModal(entry.mission, entry.dlc)));
       });
   }
 
   (mission.civilians || []).slice(0, 3).forEach(person => {
     links.push(makeQuickLink(`Victime: ${person.name}`, () => {
-      evidencePreview.textContent = person.desc || '// Aucun dÃ©tail supplÃ©mentaire';
+      evidencePreview.textContent = person.desc || '// Aucun détail supplémentaire';
     }));
   });
 
   (mission.suspects || []).slice(0, 3).forEach(person => {
     links.push(makeQuickLink(`Suspect: ${person.name}`, () => {
-      evidencePreview.textContent = person.desc || '// Aucun dÃ©tail supplÃ©mentaire';
+      evidencePreview.textContent = person.desc || '// Aucun détail supplémentaire';
     }));
   });
 
@@ -962,7 +962,7 @@ function makeColumnCustomBlock() {
   header.contentEditable = 'true';
   header.spellcheck = false;
   section.querySelector('.section-body').classList.add('custom-grid-body');
-  section.querySelector('.section-body').appendChild(makeEmptyText('// DÃ©pose des blocs ici'));
+  section.querySelector('.section-body').appendChild(makeEmptyText('// Dépose des blocs ici'));
   return section;
 }
 
@@ -1208,7 +1208,7 @@ function appendCustomBlock(section, type) {
     setCustomBlocksEditable(activeModalEditMode);
     imageBlock.querySelector('.custom-block-field')?.focus();
     return;
-    const url = prompt('URL de lâ€™image');
+    const url = prompt('URL de l’image');
     if (!url) return;
     const block = document.createElement('div');
     block.className = 'custom-block';
@@ -1269,7 +1269,7 @@ function makeImage(src, alt, className) {
 
 function parseMissionDate(dateText) {
   if (!dateText) return null;
-  if (dateText.startsWith('AprÃ¨s le 4 septembre 2028')) {
+  if (dateText.startsWith('Après le 4 septembre 2028')) {
     return { date: new Date(2028, 8, 5), approximate: true };
   }
 
@@ -1301,7 +1301,7 @@ function buildPeopleBoard() {
   const entries = getPeopleEntries();
 
   if (entries.length === 0) {
-    peopleGrid.appendChild(makeEmptyText('// AUCUNE PERSONNE RENSEIGNÃ‰E'));
+    peopleGrid.appendChild(makeEmptyText('// AUCUNE PERSONNE RENSEIGNÉE'));
     return;
   }
 
@@ -1309,7 +1309,7 @@ function buildPeopleBoard() {
     const card = document.createElement('button');
     card.type = 'button';
     card.className = `person-card ${role}`;
-    card.setAttribute('aria-label', `Ouvrir la mission liÃ©e Ã  ${person.name}`);
+    card.setAttribute('aria-label', `Ouvrir la mission liée à ${person.name}`);
     card.append(
       makeTextElement('span', 'person-role', label),
       makeTextElement('div', 'person-name', person.name),
@@ -1460,8 +1460,8 @@ function makeTimelineMoreCard(stack, hiddenCount, top) {
   card.className = 'timeline-card more';
   card.style.left = `${stack.left}px`;
   card.style.top = `${top}px`;
-  card.textContent = `Encore ${hiddenCount} Ã©lÃ©ment${hiddenCount > 1 ? 's' : ''}`;
-  card.setAttribute('aria-label', `${hiddenCount} missions supplÃ©mentaires`);
+  card.textContent = `Encore ${hiddenCount} élément${hiddenCount > 1 ? 's' : ''}`;
+  card.setAttribute('aria-label', `${hiddenCount} missions supplémentaires`);
   if (isExpanded) card.textContent = 'Replier la pile';
   card.setAttribute('aria-label', isExpanded ? 'Replier cette pile de missions' : card.getAttribute('aria-label'));
   card.setAttribute('aria-expanded', String(isExpanded));
@@ -1666,9 +1666,9 @@ function buildBoard(filter = '') {
   noResults.style.display = totalVisible === 0 ? 'block' : 'none';
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 //  MODAL
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 function refreshBoardFromSearch() {
   buildBoard(searchInput.value);
 }
@@ -1688,10 +1688,10 @@ function updateFilterSummary() {
     : activeFilterMode;
 
   if (selectedCount === 0) {
-    filterSummary.textContent = 'Aucun tag sÃ©lectionnÃ©';
+    filterSummary.textContent = 'Aucun tag sélectionné';
     return;
   }
-  filterSummary.textContent = `${selectedCount} tag(s) sÃ©lectionnÃ©(s) - mode ${mode.toUpperCase()}`;
+  filterSummary.textContent = `${selectedCount} tag(s) sélectionné(s) - mode ${mode.toUpperCase()}`;
 }
 
 function renderFilterTags() {
@@ -1928,7 +1928,7 @@ function openBlockCustom(target) {
     blockTextUnderline.checked = target.dataset.underline === 'true';
     blockTextColor.value = getColorValue(target.dataset.textColor, '#d7d7db');
   } else if (target.classList.contains('custom-block-separator')) {
-    blockCustomTitle.textContent = 'Custom sÃ©parateur';
+    blockCustomTitle.textContent = 'Custom séparateur';
     blockCustomSeparator.classList.remove('custom-panel-hidden');
     blockSeparatorColor.value = getColorValue(target.dataset.separatorColor, '#e74c3c');
     blockSeparatorOrientation.value = target.dataset.orientation || 'horizontal';
@@ -2001,7 +2001,7 @@ function renderSettingsTags() {
     const editButton = document.createElement('button');
     editButton.type = 'button';
     editButton.className = 'tag-icon-action';
-    editButton.textContent = 'âœŽ';
+    editButton.textContent = '✎';
     editButton.title = `Modifier le tag ${tag}`;
     editButton.setAttribute('aria-label', `Modifier le tag ${tag}`);
     editButton.addEventListener('click', async () => {
@@ -2023,7 +2023,7 @@ function renderSettingsTags() {
     const deleteButton = document.createElement('button');
     deleteButton.type = 'button';
     deleteButton.className = 'tag-icon-action danger';
-    deleteButton.textContent = 'ðŸ—‘';
+    deleteButton.textContent = '🗑';
     deleteButton.title = `Supprimer le tag ${tag}`;
     deleteButton.setAttribute('aria-label', `Supprimer le tag ${tag}`);
     deleteButton.addEventListener('click', async () => {
@@ -2185,7 +2185,7 @@ function renderTagEditor(container, mission, dlc) {
     tagButton.title = `Clic droit pour retirer le tag ${tag}`;
     tagButton.append(
       makeTextElement('span', '', tag),
-      makeTextElement('span', 'tag-remove', 'Ã—')
+      makeTextElement('span', 'tag-remove', '×')
     );
     tagButton.addEventListener('contextmenu', e => {
       e.preventDefault();
@@ -2207,8 +2207,8 @@ function renderTagEditor(container, mission, dlc) {
   const editButton = document.createElement('button');
   editButton.type = 'button';
   editButton.className = 'tag tag-add modal-edit-toggle';
-  editButton.textContent = 'âœŽ';
-  editButton.title = activeModalEditMode ? 'Quitter le mode Ã©dition' : 'Passer en mode Ã©dition';
+  editButton.textContent = '✎';
+  editButton.title = activeModalEditMode ? 'Quitter le mode édition' : 'Passer en mode édition';
   editButton.setAttribute('aria-label', editButton.title);
   editButton.classList.toggle('active', activeModalEditMode);
   editButton.setAttribute('aria-pressed', String(activeModalEditMode));
@@ -2231,8 +2231,8 @@ function renderTagEditor(container, mission, dlc) {
     const resetButton = document.createElement('button');
     resetButton.type = 'button';
     resetButton.className = 'tag tag-add modal-layout-reset';
-    resetButton.textContent = 'â†»';
-    resetButton.title = 'RÃ©initialiser la position des supra blocs';
+    resetButton.textContent = '↻';
+    resetButton.title = 'Réinitialiser la position des supra blocs';
     resetButton.setAttribute('aria-label', resetButton.title);
     resetButton.addEventListener('click', () => {
       closeBlockLibrary();
@@ -2280,7 +2280,7 @@ function renderTagForm(container, mission, dlc) {
       .filter(tag => !query || tag.toLowerCase().includes(query));
 
     if (options.length === 0) {
-      suggestions.appendChild(makeTextElement('div', 'tag-suggestion-empty', query ? `CrÃ©er "${query}"` : 'Aucun tag disponible'));
+      suggestions.appendChild(makeTextElement('div', 'tag-suggestion-empty', query ? `Créer "${query}"` : 'Aucun tag disponible'));
       return;
     }
 
@@ -2670,18 +2670,18 @@ heroImg.addEventListener('error', () => {
   heroImg.style.display = 'none';
 });
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 //  SEARCH
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 let searchTimer;
 searchInput.addEventListener('input', e => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => buildBoard(e.target.value), 200);
 });
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 //  INIT
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 loadSavedTags();
 buildBoard();
 buildTimeline();
