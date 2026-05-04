@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ready Or Not - Lore</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<div id="hero">
+  <img id="hero-img" src="https://cdn2.steamgriddb.com/hero_thumb/6c465ed53d17739467c95fe414d8e056.jpg" alt="Ready Or Not">
+  <img id="hero-logo" src="assets/ready_or_not_lore_logo.webp" alt="Ready Or Not Lore">
+</div>
+
+<div id="header">
+  <div id="search-wrap">
+    <input id="search" type="text" placeholder="SEARCH MISSIONS..." autocomplete="off">
+    <button id="filter-btn" class="control-btn" type="button" data-count="">Filtre</button>
+    <button id="settings-btn" class="control-btn icon-btn" type="button" aria-label="ParamÃ¨tres">&#9881;</button>
+  </div>
+</div>
+
+<div id="board-wrap">
+  <div id="board"></div>
+  <div class="no-results" id="no-results">// NO MISSIONS FOUND</div>
+</div>
+
+<section id="timeline-section" aria-labelledby="timeline-title">
+  <div class="timeline-head">
+    <div>
+      <div id="timeline-title" class="timeline-title">Chronologie des missions</div>
+      <div class="timeline-subtitle">Vue chronologique officielle et Ã©vÃ©nements secrets estimÃ©s</div>
+    </div>
+    <label class="timeline-controls">
+      <span class="timeline-subtitle">PrÃ©cision</span>
+      <select id="timeline-scale" class="timeline-scale">
+        <option value="day">Jour</option>
+        <option value="week">Semaine</option>
+        <option value="month" selected>Mois</option>
+        <option value="year">AnnÃ©e</option>
+      </select>
+    </label>
+  </div>
+  <div id="timeline-scroll">
+    <div id="timeline"></div>
+  </div>
+</section>
+
+<section id="people-section" aria-labelledby="people-title">
+  <div class="timeline-head">
+    <div>
+      <div id="people-title" class="timeline-title">Trombinoscope</div>
+      <div class="timeline-subtitle">Victimes et suspects renseignÃ©s dans les fiches mission</div>
+    </div>
+  </div>
+  <div id="people-grid" class="people-grid"></div>
+</section>
+
+<!-- MODAL -->
+<div id="modal-bg" aria-hidden="true">
+  <div id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div id="modal-hero">
+      <img id="modal-img" src="" alt="">
+      <button id="modal-close" type="button" aria-label="Close mission details">âœ•</button>
+    </div>
+    <div id="modal-content">
+      <div id="modal-title"></div>
+      <div id="modal-meta"></div>
+      <div id="modal-grid"></div>
+    </div>
+  </div>
+  <aside id="intel-panel" aria-label="Notes, preuves et liens rapides">
+    <div class="intel-panel-inner">
+      <div class="intel-header">
+        <div class="intel-kicker">Dossier actif</div>
+        <div id="intel-title" class="intel-title">Analyse</div>
+      </div>
+
+      <section class="intel-section" aria-labelledby="notes-title">
+        <div id="notes-title" class="intel-section-title">Bloc note</div>
+        <textarea id="mission-notes" class="mission-notes" placeholder="// Notes rapides"></textarea>
+      </section>
+
+      <section class="intel-section" aria-labelledby="evidence-title">
+        <div id="evidence-title" class="intel-section-title">Visualiseur de preuve</div>
+        <div id="evidence-list" class="evidence-viewer"></div>
+        <div id="evidence-preview" class="evidence-preview">// Aucune preuve sÃ©lectionnÃ©e</div>
+      </section>
+
+      <section class="intel-section" aria-labelledby="links-title">
+        <div id="links-title" class="intel-section-title">Liens rapides</div>
+        <div id="quick-links" class="quick-links"></div>
+      </section>
+    </div>
+    <div id="editor-block-library" class="editor-block-library" aria-hidden="true">
+      <div class="intel-header">
+        <div class="intel-kicker">Mode Ã©dition</div>
+        <div class="intel-title">BibliothÃ¨que de blocs</div>
+      </div>
+      <div class="editor-block-list">
+        <button class="editor-block-option" type="button" data-block-type="text">
+          <span class="editor-block-name">Bloc texte</span>
+          <span class="editor-block-desc">Ajoute une note libre sur la grille.</span>
+        </button>
+        <button class="editor-block-option" type="button" data-block-type="image">
+          <span class="editor-block-name">Bloc image</span>
+          <span class="editor-block-desc">Ajoute une image depuis une URL.</span>
+        </button>
+        <button class="editor-block-option" type="button" data-block-type="link">
+          <span class="editor-block-name">Bloc lien</span>
+          <span class="editor-block-desc">Ajoute un raccourci cliquable.</span>
+        </button>
+        <button class="editor-block-option" type="button" data-block-type="column">
+          <span class="editor-block-name">Bloc colonne</span>
+          <span class="editor-block-desc">Ajoute une section avec titre et zone de contenu.</span>
+        </button>
+        <button class="editor-block-option" type="button" data-block-type="separator">
+          <span class="editor-block-name">SÃ©parateur</span>
+          <span class="editor-block-desc">Ajoute une ligne pour structurer le dossier.</span>
+        </button>
+      </div>
+      <button id="delete-mode-toggle" class="delete-mode-toggle" type="button" aria-pressed="false">
+        <span class="editor-block-name">Mode suppression</span>
+        <span class="editor-block-desc">Clique sur un bloc custom pour le retirer.</span>
+      </button>
+    </div>
+  </aside>
+</div>
+
+<div id="block-library" class="block-library" aria-hidden="true">
+  <button class="block-option" type="button" data-block-type="text">Bloc texte</button>
+  <button class="block-option" type="button" data-block-type="image">Bloc image</button>
+  <button class="block-option" type="button" data-block-type="link">Bloc lien</button>
+  <button class="block-option" type="button" data-block-type="column">Bloc colonne</button>
+  <button class="block-option" type="button" data-block-type="separator">SÃ©parateur</button>
+</div>
+
+<!-- FILTERS -->
+<div id="filter-bg" aria-hidden="true">
+  <div id="filter-panel" role="dialog" aria-modal="true" aria-labelledby="filter-title">
+    <div class="filter-head">
+      <div>
+        <div id="filter-title" class="filter-title">Filtres avancÃ©s</div>
+        <div class="filter-subtitle">SÃ©lection par tags et logique boolÃ©enne</div>
+      </div>
+      <button id="filter-close" class="control-btn" type="button">Fermer</button>
+    </div>
+    <div class="filter-body">
+      <div class="filter-toolbar">
+        <div class="filter-mode" aria-label="Mode boolÃ©en">
+          <input id="filter-mode-or" type="radio" name="filter-mode" value="or" checked>
+          <label for="filter-mode-or">OU</label>
+          <input id="filter-mode-and" type="radio" name="filter-mode" value="and">
+          <label for="filter-mode-and">ET</label>
+        </div>
+        <div class="filter-subtitle" id="filter-summary">Aucun tag sÃ©lectionnÃ©</div>
+      </div>
+      <div id="filter-tags" class="filter-tags"></div>
+      <div class="filter-actions">
+        <button id="filter-reset" class="control-btn" type="button">RÃ©initialiser</button>
+        <button id="filter-apply" class="control-btn" type="button">Appliquer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div id="settings-bg" aria-hidden="true">
+  <div id="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="filter-head">
+      <div>
+        <div id="settings-title" class="filter-title">ParamÃ¨tres</div>
+        <div class="filter-subtitle">Gestion des tags</div>
+      </div>
+      <button id="settings-close" class="control-btn" type="button">Fermer</button>
+    </div>
+    <div class="settings-layout">
+      <div class="settings-nav">
+        <button class="settings-tab active" type="button" data-settings-page="tuto">Tuto</button>
+        <button class="settings-tab" type="button" data-settings-page="tags">Tags</button>
+        <button class="settings-tab" type="button" data-settings-page="legal">Mentions lÃ©gales</button>
+        <button class="settings-tab" type="button" data-settings-page="login">Connexion</button>
+      </div>
+      <div class="settings-content">
+        <div id="settings-page-tuto" class="settings-page active">
+          <div class="settings-summary">Guide rapide des interactions</div>
+          <div class="tuto-grid">
+            <div class="tuto-card">
+              <h3>Navigation</h3>
+              <p>Clique sur une carte mission pour ouvrir sa fiche dÃ©taillÃ©e. La touche Escape ferme les panneaux et les modals ouverts.</p>
+            </div>
+            <div class="tuto-card">
+              <h3>Recherche</h3>
+              <p>La recherche filtre par nom de mission, tag ou texte de brief. Elle se combine avec les filtres avancÃ©s.</p>
+            </div>
+            <div class="tuto-card">
+              <h3>Filtres</h3>
+              <p>Le bouton Filtre permet de cocher des tags. Le mode OU garde les cartes avec au moins un tag, le mode ET exige tous les tags cochÃ©s.</p>
+            </div>
+            <div class="tuto-card">
+              <h3>Tags</h3>
+              <p>Dans une fiche mission, + Ajouter un tag permet de choisir un tag existant ou d'en crÃ©er un nouveau. Clic droit sur un tag pour le retirer.</p>
+            </div>
+            <div class="tuto-card">
+              <h3>Gestion</h3>
+              <p>Dans ParamÃ¨tres > Tags, le crayon renomme un tag et change sa couleur. La poubelle supprime le tag partout aprÃ¨s confirmation.</p>
+            </div>
+            <div class="tuto-card">
+              <h3>Couleurs</h3>
+              <p>Tu peux utiliser une couleur prÃ©dÃ©finie ou le sÃ©lecteur libre. Le bouton â‡© enregistre une couleur custom dans les emplacements disponibles.</p>
+            </div>
+          </div>
+        </div>
+        <div id="settings-page-tags" class="settings-page">
+          <div id="settings-summary" class="settings-summary"></div>
+          <div id="tag-summary-list" class="tag-summary-list"></div>
+        </div>
+        <div id="settings-page-legal" class="settings-page">
+          <div class="settings-summary">Mentions lÃ©gales</div>
+          <div class="legal-copy">
+            <section>
+              <h3>Ã‰diteur du site</h3>
+              <p>ConformÃ©ment Ã  l'article 6 III-2 de la LCEN, les coordonnÃ©es de l'Ã©diteur sont disponibles sur demande auprÃ¨s de l'hÃ©bergeur ci-dessous.</p>
+            </section>
+            <section>
+              <h3>HÃ©bergeur</h3>
+              <p>Render Services, Inc.<br>425 2nd Street, Suite 401, San Francisco, CA 94107, Ã‰tats-Unis<br>https://render.com</p>
+            </section>
+            <section>
+              <h3>DonnÃ©es personnelles</h3>
+              <p>Ce site ne collecte aucune donnÃ©e personnelle. Aucun cookie de traÃ§age n'est utilisÃ©. Les donnÃ©es saisies dans l'application sont stockÃ©es uniquement en local sur votre appareil et ne sont jamais transmises Ã  un serveur.</p>
+            </section>
+            <div class="tuto-card legal-highlight">
+              <h3>PropriÃ©tÃ© intellectuelle</h3>
+              <p>Ready or Not ainsi que tous les Ã©lÃ©ments associÃ©s, noms, images et ressources visuelles sont la propriÃ©tÃ© de VOID Interactive. <strong>Ce site est un site non officiel</strong> crÃ©Ã© par des fans Ã  des fins de divertissement uniquement. Il n'est ni affiliÃ© Ã  VOID Interactive, ni approuvÃ©, ni sponsorisÃ© par VOID Interactive. Aucune violation du droit d'auteur n'est intentionnelle.</p>
+            </div>
+            <section>
+              <h3>Lien vers le site du jeu</h3>
+              <p><a href="https://voidinteractive.net/ready-or-not/">https://voidinteractive.net/ready-or-not/</a></p>
+            </section>
+          </div>
+        </div>
+        <div id="settings-page-login" class="settings-page">
+          <div class="settings-summary">Connexion</div>
+          <div class="tuto-grid">
+            <div class="tuto-card">
+              <h3>Compte</h3>
+              <p>Connexion non configurÃ©e pour le moment. Les donnÃ©es restent stockÃ©es localement sur cet appareil.</p>
+            </div>
+            <div class="tuto-card">
+              <h3>Synchronisation</h3>
+              <p>Une future connexion pourra servir Ã  synchroniser les dossiers, tags, notes et mises en page.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT -->
+<div id="edit-bg" aria-hidden="true">
+  <form id="edit-dialog" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+    <div id="edit-title" class="confirm-head">Modifier le tag</div>
+    <div class="edit-body">
+      <label id="edit-label" class="edit-label" for="edit-input">Nouveau nom</label>
+      <input id="edit-input" class="edit-input" type="text" autocomplete="off">
+      <div class="color-panel">
+        <div class="edit-label">Couleur</div>
+        <div id="edit-color-grid" class="color-grid"></div>
+        <div class="color-picker-row">
+          <input id="edit-color-picker" class="color-picker" type="color" aria-label="Couleur personnalisÃ©e">
+          <div id="edit-color-value" class="color-value"></div>
+          <button id="edit-color-save" class="control-btn icon-btn color-save" type="button" title="Enregistrer cette couleur" aria-label="Enregistrer cette couleur">â‡©</button>
+        </div>
+        <div class="custom-palette-head">
+          <div class="edit-label">Couleurs enregistrÃ©es</div>
+          <div id="custom-palette-note" class="custom-palette-note"></div>
+        </div>
+        <div id="edit-custom-color-grid" class="custom-color-grid"></div>
+      </div>
+    </div>
+    <div class="confirm-actions">
+      <button id="edit-cancel" class="control-btn" type="button">Annuler</button>
+      <button id="edit-ok" class="control-btn danger" type="submit">Valider</button>
+    </div>
+  </form>
+</div>
+
+<!-- BLOCK CUSTOM -->
+<div id="block-custom-bg" aria-hidden="true">
+  <form id="block-custom-dialog" role="dialog" aria-modal="true" aria-labelledby="block-custom-title">
+    <div id="block-custom-title" class="confirm-head">Custom bloc</div>
+    <div class="edit-body">
+      <div id="block-custom-column" class="custom-panel-row custom-panel-hidden">
+        <label class="edit-label" for="block-border-color">Couleur de bordure</label>
+        <input id="block-border-color" type="color">
+        <label class="edit-label" for="block-bg-color">Couleur de fond</label>
+        <input id="block-bg-color" type="color">
+        <label class="edit-label" for="block-title-color">Couleur de titre</label>
+        <input id="block-title-color" type="color">
+      </div>
+      <div id="block-custom-text" class="custom-panel-row custom-panel-hidden">
+        <label class="edit-label" for="block-text-size">Style</label>
+        <select id="block-text-size">
+          <option value="text">Texte</option>
+          <option value="h1">H1</option>
+          <option value="h2">H2</option>
+          <option value="h3">H3</option>
+        </select>
+        <div class="custom-panel-row inline">
+          <label class="custom-panel-check"><input id="block-text-bold" type="checkbox"> Gras</label>
+          <label class="custom-panel-check"><input id="block-text-italic" type="checkbox"> Italique</label>
+          <label class="custom-panel-check"><input id="block-text-underline" type="checkbox"> SoulignÃ©</label>
+        </div>
+        <label class="edit-label" for="block-text-color">Couleur de texte</label>
+        <input id="block-text-color" type="color">
+      </div>
+      <div id="block-custom-separator" class="custom-panel-row custom-panel-hidden">
+        <label class="edit-label" for="block-separator-color">Couleur du trait</label>
+        <input id="block-separator-color" type="color">
+        <label class="edit-label" for="block-separator-orientation">Orientation</label>
+        <select id="block-separator-orientation">
+          <option value="horizontal">Horizontal</option>
+          <option value="vertical">Vertical</option>
+        </select>
+      </div>
+    </div>
+    <div class="confirm-actions">
+      <button id="block-custom-cancel" class="control-btn" type="button">Annuler</button>
+      <button id="block-custom-ok" class="control-btn danger" type="submit">Appliquer</button>
+    </div>
+  </form>
+</div>
+
+<!-- CONFIRM -->
+<div id="confirm-bg" aria-hidden="true">
+  <div id="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <div id="confirm-title" class="confirm-head">Confirmation</div>
+    <div id="confirm-message" class="confirm-body"></div>
+    <div class="confirm-actions">
+      <button id="confirm-cancel" class="control-btn" type="button">Annuler</button>
+      <button id="confirm-ok" class="control-btn danger" type="button">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/app.js"></script>
+</body>
+</html>
