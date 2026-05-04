@@ -138,7 +138,7 @@ function sessionCookieOptions() {
   return {
     httpOnly: true,
     secure: isProduction,
-    sameSite: "lax",
+    sameSite: isProduction ? "none" : "lax",
     maxAge: SESSION_TTL_SECONDS * 1000,
     path: "/"
   };

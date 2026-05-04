@@ -187,6 +187,11 @@ const API_BASE_URL = (
   document.querySelector('meta[name="ron-lore-api-base"]')?.content ||
   ''
 ).replace(/\/$/, '');
+const ADMIN_ORIGIN = (
+  window.RON_LORE_ADMIN_ORIGIN ||
+  document.querySelector('meta[name="ron-lore-admin-origin"]')?.content ||
+  ''
+).replace(/\/$/, '');
 const MAX_CUSTOM_TAG_COLORS = 12;
 const COLLAPSIBLE_COLUMN_ID = 'ready_or_not';
 const COLLAPSED_COLUMN_LIMIT = 3;
@@ -248,6 +253,19 @@ function hasConfiguredApiBase() {
   return Boolean(API_BASE_URL);
 }
 
+function isLocalFrontendOrigin() {
+  return ['localhost', '127.0.0.1'].includes(window.location.hostname);
+}
+
+function shouldRedirectToAdminOrigin() {
+  return Boolean(ADMIN_ORIGIN) && !isLocalFrontendOrigin() && window.location.origin !== ADMIN_ORIGIN;
+}
+
+function redirectToAdminOrigin() {
+  if (!shouldRedirectToAdminOrigin()) return;
+  window.location.assign(`${ADMIN_ORIGIN}${window.location.pathname}${window.location.search}${window.location.hash}`);
+}
+
 function requireAdmin() {
   return isAdminAuthenticated;
 }
@@ -290,6 +308,10 @@ function setAdminAuthenticated(authenticated) {
   isAdminAuthenticated = Boolean(authenticated);
   document.body.classList.toggle('admin-authenticated', isAdminAuthenticated);
   updateAdminLoginUi();
+
+  if (isAdminAuthenticated) {
+    redirectToAdminOrigin();
+  }
 
   if (isAdminAuthenticated && !wasAdminAuthenticated) {
     loadSavedTags();
