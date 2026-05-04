@@ -12,14 +12,20 @@ const PORT = process.env.PORT || 10000;
 const COOKIE_NAME = "ron_lore_session";
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 const SAFE_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const DEFAULT_FRONTEND_ORIGINS = [
+  "https://ron-lore.online",
+  "https://admin.ron-lore.online"
+];
 
 const app = express();
 
 function getAllowedFrontendOrigins() {
-  return (process.env.FRONTEND_ORIGIN || "")
+  const envOrigins = (process.env.FRONTEND_ORIGIN || "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+
+  return [...new Set([...DEFAULT_FRONTEND_ORIGINS, ...envOrigins])];
 }
 
 const corsOptions = {
@@ -33,7 +39,9 @@ const corsOptions = {
 
     callback(null, allowedOrigins.includes(origin));
   },
-  credentials: true
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Accept"],
+  methods: ["GET", "POST", "PUT", "OPTIONS"]
 };
 
 app.set("trust proxy", 1);
