@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="ron-lore-api-base" content="https://ron-lore-backend.onrender.com">
 <title>Ready Or Not - Lore</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -95,7 +96,7 @@
         <div id="quick-links" class="quick-links"></div>
       </section>
     </div>
-    <div id="editor-block-library" class="editor-block-library" aria-hidden="true">
+    <div id="editor-block-library" class="editor-block-library" aria-hidden="true" data-admin-only hidden>
       <div class="intel-header">
         <div class="intel-kicker">Mode édition</div>
         <div class="intel-title">Bibliothèque de blocs</div>
@@ -130,7 +131,7 @@
   </aside>
 </div>
 
-<div id="block-library" class="block-library" aria-hidden="true">
+<div id="block-library" class="block-library" aria-hidden="true" data-admin-only hidden>
   <button class="block-option" type="button" data-block-type="text">Bloc texte</button>
   <button class="block-option" type="button" data-block-type="image">Bloc image</button>
   <button class="block-option" type="button" data-block-type="link">Bloc lien</button>
@@ -180,7 +181,7 @@
     <div class="settings-layout">
       <div class="settings-nav">
         <button class="settings-tab active" type="button" data-settings-page="tuto">Tuto</button>
-        <button class="settings-tab" type="button" data-settings-page="tags">Tags</button>
+        <button class="settings-tab" type="button" data-settings-page="tags" data-admin-only hidden>Tags</button>
         <button class="settings-tab" type="button" data-settings-page="legal">Mentions légales</button>
         <button class="settings-tab" type="button" data-settings-page="login">Connexion</button>
       </div>
@@ -200,21 +201,21 @@
               <h3>Filtres</h3>
               <p>Le bouton Filtre permet de cocher des tags. Le mode OU garde les cartes avec au moins un tag, le mode ET exige tous les tags cochés.</p>
             </div>
-            <div class="tuto-card">
+            <div class="tuto-card" data-admin-only hidden>
               <h3>Tags</h3>
               <p>Dans une fiche mission, + Ajouter un tag permet de choisir un tag existant ou d'en créer un nouveau. Clic droit sur un tag pour le retirer.</p>
             </div>
-            <div class="tuto-card">
+            <div class="tuto-card" data-admin-only hidden>
               <h3>Gestion</h3>
               <p>Dans Paramètres > Tags, le crayon renomme un tag et change sa couleur. La poubelle supprime le tag partout après confirmation.</p>
             </div>
-            <div class="tuto-card">
+            <div class="tuto-card" data-admin-only hidden>
               <h3>Couleurs</h3>
               <p>Tu peux utiliser une couleur prédéfinie ou le sélecteur libre. Le bouton ⇩ enregistre une couleur custom dans les emplacements disponibles.</p>
             </div>
           </div>
         </div>
-        <div id="settings-page-tags" class="settings-page">
+        <div id="settings-page-tags" class="settings-page" data-admin-only hidden>
           <div id="settings-summary" class="settings-summary"></div>
           <div id="tag-summary-list" class="tag-summary-list"></div>
         </div>
@@ -244,15 +245,20 @@
           </div>
         </div>
         <div id="settings-page-login" class="settings-page">
-          <div class="settings-summary">Connexion</div>
-          <div class="tuto-grid">
-            <div class="tuto-card">
-              <h3>Compte</h3>
-              <p>Connexion non configurée pour le moment. Les données restent stockées localement sur cet appareil.</p>
+          <div id="admin-session-summary" class="settings-summary">Mode lecture publique</div>
+          <form id="admin-login-form" class="admin-login-form" autocomplete="off">
+            <label class="edit-label" for="admin-password">Mot de passe administrateur</label>
+            <div class="admin-login-row">
+              <input id="admin-password" class="edit-input" type="password" autocomplete="current-password" required>
+              <button id="admin-login-submit" class="control-btn danger" type="submit">Connexion</button>
             </div>
-            <div class="tuto-card">
-              <h3>Synchronisation</h3>
-              <p>Une future connexion pourra servir à synchroniser les dossiers, tags, notes et mises en page.</p>
+            <div id="admin-login-message" class="admin-login-message" role="status" aria-live="polite"></div>
+          </form>
+          <div id="admin-session-panel" class="tuto-card admin-session-card" hidden>
+            <h3>Session admin</h3>
+            <p>Mode administrateur actif. Les contrôles de modification du contenu permanent sont disponibles.</p>
+            <div class="admin-session-actions">
+              <button id="admin-logout" class="control-btn" type="button">Déconnexion</button>
             </div>
           </div>
         </div>
@@ -262,7 +268,7 @@
 </div>
 
 <!-- EDIT -->
-<div id="edit-bg" aria-hidden="true">
+<div id="edit-bg" aria-hidden="true" data-admin-only hidden>
   <form id="edit-dialog" role="dialog" aria-modal="true" aria-labelledby="edit-title">
     <div id="edit-title" class="confirm-head">Modifier le tag</div>
     <div class="edit-body">
@@ -291,7 +297,7 @@
 </div>
 
 <!-- BLOCK CUSTOM -->
-<div id="block-custom-bg" aria-hidden="true">
+<div id="block-custom-bg" aria-hidden="true" data-admin-only hidden>
   <form id="block-custom-dialog" role="dialog" aria-modal="true" aria-labelledby="block-custom-title">
     <div id="block-custom-title" class="confirm-head">Custom bloc</div>
     <div class="edit-body">

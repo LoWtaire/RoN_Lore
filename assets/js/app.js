@@ -87,6 +87,10 @@ const DATA = [
   }
 ];
 
+const BASE_MISSION_TAGS = new Map(
+  DATA.flatMap(dlc => dlc.missions.map(mission => [`${dlc.id}::${mission.name}`, [...(mission.tags || [])]]))
+);
+
 // ═══════════════════════════════════════════════════════════════
 //  RENDER
 // ═══════════════════════════════════════════════════════════════
@@ -129,6 +133,13 @@ const settingsClose = document.getElementById('settings-close');
 const settingsSummary = document.getElementById('settings-summary');
 const tagSummaryList = document.getElementById('tag-summary-list');
 const settingsTabs = document.querySelectorAll('.settings-tab[data-settings-page]');
+const adminSessionSummary = document.getElementById('admin-session-summary');
+const adminLoginForm = document.getElementById('admin-login-form');
+const adminPassword = document.getElementById('admin-password');
+const adminLoginSubmit = document.getElementById('admin-login-submit');
+const adminLoginMessage = document.getElementById('admin-login-message');
+const adminSessionPanel = document.getElementById('admin-session-panel');
+const adminLogout = document.getElementById('admin-logout');
 const confirmBg = document.getElementById('confirm-bg');
 const confirmDialog = document.getElementById('confirm-dialog');
 const confirmMessage = document.getElementById('confirm-message');
@@ -171,6 +182,11 @@ const MODAL_BLOCKS_STORAGE_KEY = 'ron-lore-modal-blocks-v1';
 const MISSION_DB_STORAGE_KEY = 'ron-lore-mission-db-v1';
 const MISSION_DB_INDEX_STORAGE_KEY = 'ron-lore-mission-db-index-v1';
 const MISSION_NOTES_STORAGE_KEY = 'ron-lore-mission-notes-v1';
+const API_BASE_URL = (
+  window.RON_LORE_API_BASE ||
+  document.querySelector('meta[name="ron-lore-api-base"]')?.content ||
+  ''
+).replace(/\/$/, '');
 const MAX_CUSTOM_TAG_COLORS = 12;
 const COLLAPSIBLE_COLUMN_ID = 'ready_or_not';
 const COLLAPSED_COLUMN_LIMIT = 3;
@@ -222,6 +238,167 @@ let activeCustomBlockTarget = null;
 let lastBlockCustomFocusedElement = null;
 let selectedEditColor = TAG_COLOR_OPTIONS[0];
 let pendingCustomColorReplacement = '';
+let isAdminAuthenticated = false;
+
+function getApiUrl(path) {
+  return `${API_BASE_URL}${path}`;
+}
+
+function hasConfiguredApiBase() {
+  return Boolean(API_BASE_URL);
+}
+
+function requireAdmin() {
+  return isAdminAuthenticated;
+}
+
+function setAdminLoginMessage(message = '', type = '') {
+  if (!adminLoginMessage) return;
+  adminLoginMessage.textContent = message;
+  adminLoginMessage.classList.toggle('error', type === 'error');
+  adminLoginMessage.classList.toggle('success', type === 'success');
+}
+
+function setAdminLoginLoading(isLoading) {
+  if (adminLoginSubmit) {
+    adminLoginSubmit.disabled = isLoading;
+    adminLoginSubmit.textContent = isLoading ? 'Connexion...' : 'Connexion';
+  }
+  if (adminPassword) adminPassword.disabled = isLoading;
+}
+
+function updateAdminLoginUi() {
+  if (adminSessionSummary) {
+    if (isAdminAuthenticated) {
+      adminSessionSummary.textContent = 'Mode administrateur actif';
+    } else if (!hasConfiguredApiBase()) {
+      adminSessionSummary.textContent = 'Web Service Render non configuré';
+    } else {
+      adminSessionSummary.textContent = 'Mode lecture publique';
+    }
+  }
+  if (adminLoginForm) adminLoginForm.hidden = isAdminAuthenticated;
+  if (adminSessionPanel) adminSessionPanel.hidden = !isAdminAuthenticated;
+  if (adminPassword && isAdminAuthenticated) adminPassword.value = '';
+  if (!isAdminAuthenticated && !hasConfiguredApiBase()) {
+    setAdminLoginMessage('Renseigne l’URL publique du Web Service Render dans la meta ron-lore-api-base.', 'error');
+  }
+}
+
+function setAdminAuthenticated(authenticated) {
+  const wasAdminAuthenticated = isAdminAuthenticated;
+  isAdminAuthenticated = Boolean(authenticated);
+  document.body.classList.toggle('admin-authenticated', isAdminAuthenticated);
+  updateAdminLoginUi();
+
+  if (isAdminAuthenticated && !wasAdminAuthenticated) {
+    loadSavedTags();
+    refreshBoardFromSearch();
+    buildTimeline();
+    buildPeopleBoard();
+    refreshRenderedTagColors();
+  }
+
+  if (!isAdminAuthenticated && wasAdminAuthenticated) {
+    resetMissionTagsToBase();
+    refreshBoardFromSearch();
+    buildTimeline();
+    buildPeopleBoard();
+    refreshRenderedTagColors();
+  }
+
+  document.querySelectorAll('[data-admin-only]').forEach(element => {
+    element.hidden = !isAdminAuthenticated;
+    const keepsOwnAriaState = ['editor-block-library', 'block-library', 'edit-bg', 'block-custom-bg'].includes(element.id);
+    if (!isAdminAuthenticated) {
+      element.setAttribute('aria-hidden', 'true');
+    } else if (!keepsOwnAriaState) {
+      element.removeAttribute('aria-hidden');
+    }
+
+    element.querySelectorAll('button, input, select, textarea').forEach(control => {
+      control.disabled = !isAdminAuthenticated;
+    });
+  });
+
+  if (!isAdminAuthenticated) {
+    setModalEditMode(false);
+    closeBlockLibrary();
+    if (document.querySelector('#settings-page-tags.active')) showSettingsPage('tuto');
+  }
+
+  if (activeModalMission && activeModalDlc) {
+    const modalTags = modalMeta.querySelector('.modal-tags');
+    if (modalTags) renderTagEditor(modalTags, activeModalMission, activeModalDlc);
+    if (isAdminAuthenticated) {
+      restoreModalBlocks();
+      const savedLayout = getSavedModalLayout();
+      if (savedLayout) applySavedModalLayout(savedLayout);
+    }
+    renderIntelPanel(activeModalMission, activeModalDlc);
+  }
+}
+
+async function refreshAdminSession() {
+  if (!hasConfiguredApiBase()) {
+    setAdminAuthenticated(false);
+    return;
+  }
+
+  try {
+    const response = await fetch(getApiUrl('/auth/session'), {
+      credentials: 'include',
+      headers: { Accept: 'application/json' }
+    });
+    if (!response.ok) throw new Error('Admin session unavailable');
+    const session = await response.json();
+    setAdminAuthenticated(session.authenticated === true);
+  } catch {
+    setAdminAuthenticated(false);
+  }
+}
+
+async function loginAdmin(password) {
+  if (!hasConfiguredApiBase()) {
+    throw new Error('URL du Web Service Render non configurée.');
+  }
+
+  const response = await fetch(getApiUrl('/auth/login'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ password })
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('Mot de passe incorrect.');
+    }
+    if (response.status === 404) {
+      throw new Error('Route auth introuvable. Vérifie que l’URL pointe vers le Web Service Render, pas le Static Site.');
+    }
+    throw new Error('Connexion impossible. Vérifie l’URL du Web Service Render et la configuration CORS.');
+  }
+
+  const session = await response.json();
+  setAdminAuthenticated(session.authenticated === true);
+}
+
+async function logoutAdmin() {
+  try {
+    await fetch(getApiUrl('/auth/logout'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { Accept: 'application/json' }
+    });
+  } finally {
+    setAdminAuthenticated(false);
+    setAdminLoginMessage('Session administrateur fermée.', 'success');
+  }
+}
 
 function clearElement(element) {
   element.replaceChildren();
@@ -309,6 +486,7 @@ function getSavedTagColorMap() {
 }
 
 function saveTagColorMap(colors) {
+  if (!requireAdmin()) return;
   try {
     localStorage.setItem(TAG_COLOR_STORAGE_KEY, JSON.stringify(colors));
   } catch {
@@ -317,16 +495,18 @@ function saveTagColorMap(colors) {
 }
 
 function getTagColor(tag) {
-  return getSavedTagColorMap()[tag] || DEFAULT_TAG_COLORS[tag] || '';
+  return (requireAdmin() ? getSavedTagColorMap()[tag] : '') || DEFAULT_TAG_COLORS[tag] || '';
 }
 
 function setTagColor(tag, color) {
+  if (!requireAdmin()) return;
   const colors = getSavedTagColorMap();
   colors[tag] = color;
   saveTagColorMap(colors);
 }
 
 function renameTagColor(oldTag, newTag) {
+  if (!requireAdmin()) return;
   const colors = getSavedTagColorMap();
   if (colors[oldTag]) {
     colors[newTag] = colors[oldTag];
@@ -336,6 +516,7 @@ function renameTagColor(oldTag, newTag) {
 }
 
 function deleteTagColor(tag) {
+  if (!requireAdmin()) return;
   const colors = getSavedTagColorMap();
   delete colors[tag];
   saveTagColorMap(colors);
@@ -350,6 +531,7 @@ function getCustomTagColors() {
 }
 
 function saveCustomTagColors(colors) {
+  if (!requireAdmin()) return;
   try {
     localStorage.setItem(CUSTOM_TAG_COLORS_STORAGE_KEY, JSON.stringify(colors));
   } catch {
@@ -358,6 +540,7 @@ function saveCustomTagColors(colors) {
 }
 
 function rememberCustomTagColor(color) {
+  if (!requireAdmin()) return 'blocked';
   const normalizedColor = String(color || '').toLowerCase();
   if (!/^#[0-9a-f]{6}$/.test(normalizedColor)) return 'invalid';
   if (TAG_COLOR_OPTIONS.map(option => option.toLowerCase()).includes(normalizedColor)) return 'preset';
@@ -374,6 +557,7 @@ function rememberCustomTagColor(color) {
 }
 
 function replaceCustomTagColor(index, color) {
+  if (!requireAdmin()) return '';
   const colors = getCustomTagColors();
   colors[index] = color;
   saveCustomTagColors(colors.slice(0, MAX_CUSTOM_TAG_COLORS));
@@ -382,6 +566,7 @@ function replaceCustomTagColor(index, color) {
 }
 
 function loadSavedTags() {
+  if (!requireAdmin()) return;
   const savedTags = getSavedTagMap();
   DATA.forEach(dlc => {
     dlc.missions.forEach(mission => {
@@ -391,7 +576,16 @@ function loadSavedTags() {
   });
 }
 
+function resetMissionTagsToBase() {
+  DATA.forEach(dlc => {
+    dlc.missions.forEach(mission => {
+      mission.tags = [...(BASE_MISSION_TAGS.get(getMissionKey(dlc, mission)) || [])];
+    });
+  });
+}
+
 function saveMissionTags(dlc, mission) {
+  if (!requireAdmin()) return;
   const savedTags = getSavedTagMap();
   savedTags[getMissionKey(dlc, mission)] = mission.tags || [];
   try {
@@ -411,6 +605,7 @@ function getMissionDbMap() {
 }
 
 function saveMissionDbMap(dbMap) {
+  if (!requireAdmin()) return;
   try {
     localStorage.setItem(MISSION_DB_STORAGE_KEY, JSON.stringify(dbMap));
     localStorage.setItem(MISSION_DB_INDEX_STORAGE_KEY, JSON.stringify({
@@ -470,7 +665,7 @@ function buildActiveMissionDb() {
     },
     evidence: [...(activeModalMission.evidence || [])],
     notes: {
-      freeform: missionNotes?.value || ''
+      freeform: ''
     },
     visual: {
       sections: getMissionLayoutSnapshot(),
@@ -502,6 +697,7 @@ function getSavedModalLayouts() {
 }
 
 function saveModalLayoutMap(layouts) {
+  if (!requireAdmin()) return;
   try {
     localStorage.setItem(MODAL_LAYOUT_STORAGE_KEY, JSON.stringify(layouts));
   } catch {
@@ -510,6 +706,7 @@ function saveModalLayoutMap(layouts) {
 }
 
 function saveModalLayout() {
+  if (!requireAdmin()) return;
   if (!activeModalMissionKey) return;
   const layouts = getSavedModalLayouts();
   layouts[activeModalMissionKey] = [...modalGrid.querySelectorAll('.section')].map(section => ({
@@ -530,6 +727,7 @@ function getSavedModalLayout() {
 }
 
 function deleteSavedModalLayout() {
+  if (!requireAdmin()) return;
   if (!activeModalMissionKey) return;
   const layouts = getSavedModalLayouts();
   delete layouts[activeModalMissionKey];
@@ -545,6 +743,7 @@ function getSavedModalBlocksMap() {
 }
 
 function saveModalBlocksMap(blocks) {
+  if (!requireAdmin()) return;
   try {
     localStorage.setItem(MODAL_BLOCKS_STORAGE_KEY, JSON.stringify(blocks));
   } catch {
@@ -558,6 +757,7 @@ function getSavedModalBlocks() {
 }
 
 function deleteSavedModalBlocks() {
+  if (!requireAdmin()) return;
   if (!activeModalMissionKey) return;
   const blocks = getSavedModalBlocksMap();
   delete blocks[activeModalMissionKey];
@@ -581,7 +781,6 @@ function saveMissionNote() {
   } catch {
     // Notes still work for the current session if storage is unavailable.
   }
-  syncActiveMissionDb();
 }
 
 function getAllMissionEntries() {
@@ -708,6 +907,7 @@ function getTagSummaries() {
 }
 
 function renameTagEverywhere(oldTag, newTag) {
+  if (!requireAdmin()) return false;
   const normalizedNewTag = normalizeTagValue(newTag);
   if (!normalizedNewTag || normalizedNewTag === oldTag) return false;
 
@@ -723,6 +923,7 @@ function renameTagEverywhere(oldTag, newTag) {
 }
 
 function deleteTagEverywhere(tagToDelete) {
+  if (!requireAdmin()) return;
   DATA.forEach(dlc => {
     dlc.missions.forEach(mission => {
       mission.tags = (mission.tags || []).filter(tag => tag !== tagToDelete);
@@ -772,6 +973,7 @@ function setCustomBlocksEditable(isEditing) {
 }
 
 function setDeleteMode(isDeleting) {
+  if (isDeleting && !requireAdmin()) return;
   activeDeleteMode = isDeleting;
   modalBg.classList.toggle('delete-mode', isDeleting);
   deleteModeToggle.classList.toggle('active', isDeleting);
@@ -779,6 +981,7 @@ function setDeleteMode(isDeleting) {
 }
 
 function setModalEditMode(isEditing) {
+  if (isEditing && !requireAdmin()) return;
   activeModalEditMode = isEditing;
   modal.classList.toggle('editing', isEditing);
   modalBg.classList.toggle('modal-editing', isEditing);
@@ -851,6 +1054,7 @@ function clearModalCanvasLayout() {
 }
 
 function openBlockLibrary(button, section) {
+  if (!requireAdmin()) return;
   activeBlockTarget = section;
   const rect = button.getBoundingClientRect();
   blockLibrary.style.left = `${Math.min(rect.left, window.innerWidth - 296)}px`;
@@ -1108,6 +1312,7 @@ function hydrateCustomBlock(data) {
 }
 
 function saveModalBlocks() {
+  if (!requireAdmin()) return;
   if (!activeModalMissionKey) return;
   const blockMap = getSavedModalBlocksMap();
   const sectionOverrides = [...modalGrid.querySelectorAll(':scope > .section:not(.custom-section)')].map(section => ({
@@ -1172,6 +1377,7 @@ function restoreModalBlocks() {
 }
 
 function appendCustomBlock(section, type) {
+  if (!requireAdmin()) return;
   const isCanvasBlock = activeModalEditMode && modal.classList.contains('editing');
   const body = isCanvasBlock ? modalGrid : section?.querySelector('.section-body');
   if (!body) return;
@@ -1868,6 +2074,7 @@ function renderCustomColorSlots() {
 }
 
 function saveSelectedCustomColor() {
+  if (!requireAdmin()) return;
   const result = rememberCustomTagColor(selectedEditColor);
   if (result === 'saved') {
     renderCustomColorSlots();
@@ -1877,6 +2084,7 @@ function saveSelectedCustomColor() {
 }
 
 function showEdit(initialValue, currentColor = '') {
+  if (!requireAdmin()) return Promise.resolve(null);
   lastEditFocusedElement = document.activeElement;
   editInput.value = initialValue;
   renderColorOptions(currentColor);
@@ -1907,6 +2115,7 @@ function getCustomizableTarget(target) {
 }
 
 function openBlockCustom(target) {
+  if (!requireAdmin()) return;
   activeCustomBlockTarget = target;
   lastBlockCustomFocusedElement = document.activeElement;
   blockCustomColumn.classList.add('custom-panel-hidden');
@@ -1947,6 +2156,7 @@ function closeBlockCustom() {
 }
 
 function applyActiveBlockCustom() {
+  if (!requireAdmin()) return;
   const target = activeCustomBlockTarget;
   if (!target) return;
   if (target.classList.contains('custom-section')) {
@@ -1973,6 +2183,7 @@ function applyActiveBlockCustom() {
 }
 
 function renderSettingsTags() {
+  if (!requireAdmin()) return;
   clearElement(tagSummaryList);
   const summaries = getTagSummaries();
   const totalLinks = summaries.reduce((total, item) => total + item.entries.length, 0);
@@ -2005,6 +2216,7 @@ function renderSettingsTags() {
     editButton.title = `Modifier le tag ${tag}`;
     editButton.setAttribute('aria-label', `Modifier le tag ${tag}`);
     editButton.addEventListener('click', async () => {
+      if (!requireAdmin()) return;
       const result = await showEdit(tag, getTagColor(tag));
       if (result === null) return;
       const normalizedName = normalizeTagValue(result.name);
@@ -2027,6 +2239,7 @@ function renderSettingsTags() {
     deleteButton.title = `Supprimer le tag ${tag}`;
     deleteButton.setAttribute('aria-label', `Supprimer le tag ${tag}`);
     deleteButton.addEventListener('click', async () => {
+      if (!requireAdmin()) return;
       const confirmed = await showConfirm(`Supprimer le tag "${tag}" de ${entries.length} carte${entries.length > 1 ? 's' : ''} ?`, 'Supprimer');
       if (!confirmed) return;
       deleteTagEverywhere(tag);
@@ -2058,6 +2271,7 @@ function renderSettingsTags() {
 }
 
 function showSettingsPage(pageName) {
+  if (pageName === 'tags' && !requireAdmin()) pageName = 'tuto';
   document.querySelectorAll('.settings-page').forEach(page => {
     page.classList.toggle('active', page.id === `settings-page-${pageName}`);
   });
@@ -2165,10 +2379,12 @@ function openModal(mission, dlc) {
   modalBg.classList.add('open');
   modalBg.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
-  restoreModalBlocks();
+  if (requireAdmin()) restoreModalBlocks();
   setCustomBlocksEditable(false);
-  const savedLayout = getSavedModalLayout();
-  if (savedLayout) applySavedModalLayout(savedLayout);
+  if (requireAdmin()) {
+    const savedLayout = getSavedModalLayout();
+    if (savedLayout) applySavedModalLayout(savedLayout);
+  }
   modalClose.focus();
 }
 
@@ -2176,19 +2392,20 @@ function renderTagEditor(container, mission, dlc) {
   clearElement(container);
 
   (mission.tags || []).forEach(tag => {
-    const tagButton = document.createElement('button');
-    tagButton.type = 'button';
-    tagButton.className = 'tag tag-editable';
+    const tagButton = document.createElement(requireAdmin() ? 'button' : 'span');
+    if (requireAdmin()) tagButton.type = 'button';
+    tagButton.className = requireAdmin() ? 'tag tag-editable' : 'tag';
     const tagClass = normalizeTagClass(tag);
     if (tagClass) tagButton.classList.add(tagClass);
     applyTagColor(tagButton, tag);
-    tagButton.title = `Clic droit pour retirer le tag ${tag}`;
-    tagButton.append(
-      makeTextElement('span', '', tag),
-      makeTextElement('span', 'tag-remove', '×')
-    );
+    tagButton.appendChild(makeTextElement('span', '', tag));
+    if (requireAdmin()) {
+      tagButton.title = `Clic droit pour retirer le tag ${tag}`;
+      tagButton.appendChild(makeTextElement('span', 'tag-remove', '×'));
+    }
     tagButton.addEventListener('contextmenu', e => {
       e.preventDefault();
+      if (!requireAdmin()) return;
       mission.tags = (mission.tags || []).filter(existing => existing !== tag);
       saveMissionTags(dlc, mission);
       refreshBoardFromSearch();
@@ -2196,6 +2413,8 @@ function renderTagEditor(container, mission, dlc) {
     });
     container.appendChild(tagButton);
   });
+
+  if (!requireAdmin()) return;
 
   const addButton = document.createElement('button');
   addButton.type = 'button';
@@ -2247,6 +2466,7 @@ function renderTagEditor(container, mission, dlc) {
 }
 
 function renderTagForm(container, mission, dlc) {
+  if (!requireAdmin()) return;
   renderTagEditor(container, mission, dlc);
 
   const form = document.createElement('form');
@@ -2421,6 +2641,7 @@ function closeModal() {
 
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && modalBg.classList.contains('open') && activeModalEditMode) {
+    if (!requireAdmin()) return;
     e.preventDefault();
     appendCustomBlock(activeBlockTarget || modalGrid.querySelector('.section'), 'link');
     closeBlockLibrary();
@@ -2475,6 +2696,7 @@ modalClose.addEventListener('click', closeModal);
 missionNotes.addEventListener('input', saveMissionNote);
 
 modalGrid.addEventListener('click', e => {
+  if (!requireAdmin()) return;
   if (activeDeleteMode) {
     const target = e.target.closest('#modal-grid .custom-block') || e.target.closest('#modal-grid .custom-section');
     if (!target) return;
@@ -2490,6 +2712,7 @@ modalGrid.addEventListener('click', e => {
 });
 
 modalGrid.addEventListener('contextmenu', e => {
+  if (!requireAdmin()) return;
   if (!activeModalEditMode) return;
   if (activeDeleteMode) return;
   const target = getCustomizableTarget(e.target);
@@ -2499,6 +2722,7 @@ modalGrid.addEventListener('contextmenu', e => {
 });
 
 blockLibrary.addEventListener('click', e => {
+  if (!requireAdmin()) return;
   const option = e.target.closest('.block-option');
   if (!option) return;
   appendCustomBlock(activeBlockTarget, option.dataset.blockType);
@@ -2506,17 +2730,20 @@ blockLibrary.addEventListener('click', e => {
 });
 
 editorBlockLibrary.addEventListener('click', e => {
+  if (!requireAdmin()) return;
   const option = e.target.closest('.editor-block-option');
   if (!option || !activeModalEditMode) return;
   appendCustomBlock(modalGrid.querySelector('.section'), option.dataset.blockType);
 });
 
 deleteModeToggle.addEventListener('click', () => {
+  if (!requireAdmin()) return;
   if (!activeModalEditMode) return;
   setDeleteMode(!activeDeleteMode);
 });
 
 modalGrid.addEventListener('pointerdown', e => {
+  if (!requireAdmin()) return;
   if (activeDeleteMode) return;
   const draggable = getCanvasDraggable(e.target);
   if (!draggable) return;
@@ -2586,6 +2813,28 @@ settingsBg.addEventListener('click', e => {
   if (e.target === settingsBg) closeSettingsPanel();
 });
 
+adminLoginForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  const password = adminPassword.value;
+  if (!password) return;
+
+  setAdminLoginLoading(true);
+  setAdminLoginMessage('');
+
+  try {
+    await loginAdmin(password);
+    if (!requireAdmin()) throw new Error('Session administrateur refusée.');
+    setAdminLoginMessage('Connexion administrateur active.', 'success');
+  } catch (error) {
+    setAdminAuthenticated(false);
+    setAdminLoginMessage(error.message || 'Connexion impossible pour le moment.', 'error');
+  } finally {
+    setAdminLoginLoading(false);
+  }
+});
+
+adminLogout.addEventListener('click', logoutAdmin);
+
 confirmCancel.addEventListener('click', () => closeConfirm(false));
 confirmOk.addEventListener('click', () => closeConfirm(true));
 confirmBg.addEventListener('click', e => {
@@ -2594,6 +2843,7 @@ confirmBg.addEventListener('click', e => {
 
 editDialog.addEventListener('submit', e => {
   e.preventDefault();
+  if (!requireAdmin()) return;
   closeEdit({
     name: editInput.value,
     color: selectedEditColor
@@ -2612,6 +2862,7 @@ blockCustomBg.addEventListener('click', e => {
 });
 blockCustomDialog.addEventListener('submit', e => {
   e.preventDefault();
+  if (!requireAdmin()) return;
   applyActiveBlockCustom();
   closeBlockCustom();
 });
@@ -2682,6 +2933,8 @@ searchInput.addEventListener('input', e => {
 // ═══════════════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════════════
+setAdminAuthenticated(false);
+refreshAdminSession();
 loadSavedTags();
 buildBoard();
 buildTimeline();

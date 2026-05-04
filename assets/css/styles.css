@@ -20,6 +20,10 @@
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  [data-admin-only][hidden] {
+    display: none !important;
+  }
+
   body {
     background: var(--bg);
     color: var(--text);
@@ -1102,6 +1106,39 @@
     color: var(--text2);
     font-size: 14px;
     line-height: 1.55;
+  }
+  .admin-login-form {
+    display: grid;
+    gap: 10px;
+    max-width: 520px;
+  }
+  .admin-login-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+  }
+  .admin-login-message {
+    min-height: 20px;
+    color: var(--text2);
+    font-size: 14px;
+  }
+  .admin-login-message.error {
+    color: var(--red2);
+  }
+  .admin-login-message.success {
+    color: #2ecc71;
+  }
+  .admin-session-card {
+    max-width: 520px;
+  }
+  .admin-session-actions {
+    padding: 0 13px 13px;
+  }
+  @media (max-width: 560px) {
+    .admin-login-row {
+      grid-template-columns: 1fr;
+    }
   }
   .tag-summary-list {
     display: grid;

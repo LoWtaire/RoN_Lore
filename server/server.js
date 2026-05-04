@@ -15,31 +15,33 @@ const SAFE_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 const app = express();
 
+function getAllowedFrontendOrigins() {
+  return (process.env.FRONTEND_ORIGIN || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+const corsOptions = {
+  origin(origin, callback) {
+    const allowedOrigins = getAllowedFrontendOrigins();
+
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    callback(null, allowedOrigins.includes(origin));
+  },
+  credentials: true
+};
+
 app.set("trust proxy", 1);
 app.use(helmet());
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
-
-app.use(
-  cors({
-    origin(origin, callback) {
-      const frontendOrigin = process.env.FRONTEND_ORIGIN;
-
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-
-      if (frontendOrigin && origin === frontendOrigin) {
-        callback(null, true);
-        return;
-      }
-
-      callback(new Error("CORS origin denied"));
-    },
-    credentials: true
-  })
-);
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
