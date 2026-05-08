@@ -1175,6 +1175,22 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
+  .admin-last-commit {
+    width: fit-content;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 5px 8px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text3);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.4px;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
   .admin-push-status {
     display: flex;
     align-items: center;
@@ -1244,6 +1260,18 @@
     font-family: var(--mono);
     font-size: 10px;
     line-height: 1.35;
+  }
+  .admin-report-list {
+    display: grid;
+    gap: 4px;
+    margin: 4px 0 0;
+    padding-left: 16px;
+    color: var(--text2);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  .admin-report-list li::marker {
+    color: var(--red2);
   }
   @media (max-width: 560px) {
     .admin-login-row {

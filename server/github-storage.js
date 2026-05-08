@@ -83,4 +83,24 @@ async function updateJsonFile(path, data, commitMessage) {
   };
 }
 
-export { getFile, updateJsonFile };
+async function getLatestCommit() {
+  const config = getGithubConfig();
+  const octokit = createOctokit(config.token);
+
+  const response = await octokit.repos.listCommits({
+    owner: config.owner,
+    repo: config.repo,
+    sha: config.branch,
+    per_page: 1
+  });
+
+  const commit = response.data[0];
+  if (!commit) return null;
+
+  return {
+    sha: commit.sha,
+    message: commit.commit.message || ''
+  };
+}
+
+export { getFile, getLatestCommit, updateJsonFile };

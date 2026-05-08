@@ -169,6 +169,7 @@ const adminSyncMessage = document.getElementById('admin-sync-message');
 const adminPendingPush = document.getElementById('admin-pending-push');
 const adminPushReport = document.getElementById('admin-push-report');
 const adminPushReportPanel = document.getElementById('admin-push-report-panel');
+const adminLastCommit = document.getElementById('admin-last-commit');
 const adminLogout = document.getElementById('admin-logout');
 const confirmBg = document.getElementById('confirm-bg');
 const confirmDialog = document.getElementById('confirm-dialog');
@@ -341,6 +342,27 @@ function setAdminSyncLoading(isLoading) {
   if (adminPushDb) adminPushDb.disabled = isLoading || !isAdminAuthenticated;
 }
 
+async function refreshLatestCommitPill() {
+  if (!adminLastCommit) return;
+  if (!isAdminAuthenticated || !hasConfiguredApiBase()) {
+    adminLastCommit.textContent = 'Last commit : inconnu';
+    return;
+  }
+
+  adminLastCommit.textContent = 'Last commit : chargement...';
+  try {
+    const response = await fetch(getApiUrl('/github/latest-commit'), {
+      credentials: 'include',
+      headers: { Accept: 'application/json' }
+    });
+    if (!response.ok) throw new Error('Latest commit unavailable');
+    const body = await response.json();
+    adminLastCommit.textContent = `Last commit : ${body.commit?.message || 'inconnu'}`;
+  } catch {
+    adminLastCommit.textContent = 'Last commit : impossible a charger';
+  }
+}
+
 function updateAdminLoginUi() {
   if (adminSessionSummary) {
     if (isAdminAuthenticated) {
@@ -356,6 +378,7 @@ function updateAdminLoginUi() {
   if (adminPassword && isAdminAuthenticated) adminPassword.value = '';
   setAdminSyncLoading(false);
   updatePendingPushUi();
+  refreshLatestCommitPill();
   if (!isAdminAuthenticated && !hasConfiguredApiBase()) {
     setAdminLoginMessage('Renseigne l’URL publique du Web Service Render dans la meta ron-lore-api-base.', 'error');
   }
@@ -770,6 +793,12 @@ function getPendingMissionDbs() {
   return Object.values(getMissionDbMap()).filter(missionDb => pushedMap[missionDb.id] !== missionDb.updatedAt);
 }
 
+function getCountDiffLabel(label, before, after) {
+  if (before === after) return `${label} modifies.`;
+  if (after > before) return `${after - before} ${label.toLowerCase()} ajoute(s), ${after} au total.`;
+  return `${before - after} ${label.toLowerCase()} retire(s), ${after} restant(s).`;
+}
+
 function getMissionDbDiffs(missionDb) {
   const base = BASE_MISSION_SNAPSHOTS.get(missionDb.id) || {};
   const diffs = [];
@@ -778,16 +807,24 @@ function getMissionDbDiffs(missionDb) {
   const savedSuspects = missionDb.people?.suspects || [];
   const savedEvidence = missionDb.evidence || [];
 
-  if (valuesDiffer(savedTags, base.tags || [])) diffs.push(`Tags (${(base.tags || []).length} -> ${savedTags.length})`);
-  if ((missionDb.summary || '') !== (base.summary || '') || (missionDb.summaryHtml || '') !== (base.summaryHtml || '')) {
-    diffs.push('Briefing');
+  if (valuesDiffer(savedTags, base.tags || [])) {
+    diffs.push(`Tags modifies: ${(base.tags || []).length} avant, ${savedTags.length} maintenant.`);
   }
-  if (valuesDiffer(savedCivilians, base.civilians || [])) diffs.push(`Civils (${(base.civilians || []).length} -> ${savedCivilians.length})`);
-  if (valuesDiffer(savedSuspects, base.suspects || [])) diffs.push(`Suspects (${(base.suspects || []).length} -> ${savedSuspects.length})`);
-  if (valuesDiffer(savedEvidence, base.evidence || [])) diffs.push(`Preuves (${(base.evidence || []).length} -> ${savedEvidence.length})`);
-  if ((missionDb.visual?.blocks || []).length > 0) diffs.push('Blocs visuels');
+  if ((missionDb.summary || '') !== (base.summary || '') || (missionDb.summaryHtml || '') !== (base.summaryHtml || '')) {
+    diffs.push('Texte du briefing modifie.');
+  }
+  if (valuesDiffer(savedCivilians, base.civilians || [])) {
+    diffs.push(getCountDiffLabel('Civils', (base.civilians || []).length, savedCivilians.length));
+  }
+  if (valuesDiffer(savedSuspects, base.suspects || [])) {
+    diffs.push(getCountDiffLabel('Suspects', (base.suspects || []).length, savedSuspects.length));
+  }
+  if (valuesDiffer(savedEvidence, base.evidence || [])) {
+    diffs.push(getCountDiffLabel('Preuves', (base.evidence || []).length, savedEvidence.length));
+  }
+  if ((missionDb.visual?.blocks || []).length > 0) diffs.push(`${missionDb.visual.blocks.length} bloc(s) visuel(s) sauvegarde(s).`);
   if ((missionDb.visual?.sections || []).some(section => section.kind === 'custom' || Object.keys(section.style || {}).length > 0)) {
-    diffs.push('Colonnes / layout');
+    diffs.push('Organisation des colonnes modifiee.');
   }
   return diffs;
 }
@@ -805,9 +842,17 @@ function renderPushReport() {
     const item = document.createElement('div');
     item.className = 'admin-report-item';
     const diffs = getMissionDbDiffs(missionDb);
+    const list = document.createElement('ul');
+    list.className = 'admin-report-list';
+    (diffs.length ? diffs : ['Contenu sauvegarde localement.']).forEach(diff => {
+      const line = document.createElement('li');
+      line.textContent = diff;
+      list.appendChild(line);
+    });
     item.append(
       makeTextElement('div', 'admin-report-title', missionDb.title || missionDb.id),
-      makeTextElement('div', 'admin-report-meta', `${missionDb.dlc?.name || 'DLC inconnu'} - ${diffs.join(', ') || 'Contenu sauvegarde'}`)
+      makeTextElement('div', 'admin-report-meta', `Dans ${missionDb.dlc?.name || 'DLC inconnu'}, cette fiche sera envoyee au backend.`),
+      list
     );
     adminPushReportPanel.appendChild(item);
   });
@@ -959,6 +1004,7 @@ async function pushMissionDbMap() {
       await pushMissionDb(missionDb);
     }
     markMissionDbPushed(missions);
+    refreshLatestCommitPill();
     setAdminSyncMessage(`Push backend termine: ${missions.length} fiche(s).`, 'success');
   } catch (error) {
     setAdminSyncMessage(error.message || 'Push backend impossible.', 'error');

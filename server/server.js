@@ -6,7 +6,7 @@ import cookieParser from "cookie-parser";
 import bcrypt from "bcrypt";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
-import { updateJsonFile } from "./github-storage.js";
+import { getLatestCommit, updateJsonFile } from "./github-storage.js";
 
 const PORT = process.env.PORT || 10000;
 const COOKIE_NAME = "ron_lore_session";
@@ -233,6 +233,15 @@ app.post("/auth/logout", (req, res) => {
 app.get("/auth/session", (req, res) => {
   res.json({ authenticated: verifySessionToken(req.cookies[COOKIE_NAME]) });
 });
+
+app.get(
+  "/github/latest-commit",
+  requireEditor,
+  asyncRoute(async (req, res) => {
+    const commit = await getLatestCommit();
+    res.json({ commit });
+  })
+);
 
 app.put(
   "/data/missions/:id",
