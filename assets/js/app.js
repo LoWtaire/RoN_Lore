@@ -81,7 +81,7 @@ const DATA = [
     name: "Others",
     missions: [
       mission("SecretEnd - Prison", ["secret"], { date: "Après le 4 septembre 2028", thumb: "assets/missions/Secret_prison.webp"}),
-      mission("SecretEnd - Appart", ["secret"], { date: "Après le 4 septembre 2028" }),
+      mission("SecretEnd - Appart", ["secret"], { date: "Après le 4 septembre 2028", thumb: "assets/missions/Secret_appart.webp"}),
       mission("Commissariat", ["secret"], { thumb: "assets/missions/LSPD_HQ.webp" })
     ]
   }
@@ -89,6 +89,9 @@ const DATA = [
 
 const BASE_MISSION_TAGS = new Map(
   DATA.flatMap(dlc => dlc.missions.map(mission => [`${dlc.id}::${mission.name}`, [...(mission.tags || [])]]))
+);
+const BASE_MISSION_SNAPSHOTS = new Map(
+  DATA.flatMap(dlc => dlc.missions.map(mission => [getMissionKey(dlc, mission), createMissionSnapshot(mission)]))
 );
 
 // ═══════════════════════════════════════════════════════════════
@@ -108,6 +111,27 @@ const evidencePreview = document.getElementById('evidence-preview');
 const quickLinks = document.getElementById('quick-links');
 const blockLibrary = document.getElementById('block-library');
 const editorBlockLibrary = document.getElementById('editor-block-library');
+const imageBank = document.getElementById('image-bank');
+const imageBankUploadBtn = document.getElementById('image-bank-upload-btn');
+const imageBankUpload = document.getElementById('image-bank-upload');
+const imageContextMenu = document.getElementById('image-context-menu');
+const imageNameBg = document.getElementById('image-name-bg');
+const imageNameDialog = document.getElementById('image-name-dialog');
+const imageNameTitle = document.getElementById('image-name-title');
+const imageNameInput = document.getElementById('image-name-input');
+const imageNameCancel = document.getElementById('image-name-cancel');
+const imageNameOk = document.getElementById('image-name-ok');
+const briefFormatToolbar = document.getElementById('brief-format-toolbar');
+const briefFormatColors = document.getElementById('brief-format-colors');
+const briefFormatColor = document.getElementById('brief-format-color');
+const briefColorSave = document.getElementById('brief-color-save');
+const briefColorToggle = document.getElementById('brief-color-toggle');
+const briefColorPreview = document.getElementById('brief-color-preview');
+const briefColorPopover = document.getElementById('brief-color-popover');
+const briefCustomColors = document.getElementById('brief-custom-colors');
+const resourceBank = document.getElementById('resource-bank');
+const resourceBankSearch = document.getElementById('resource-bank-search');
+const resourceBankFilters = document.querySelectorAll('.resource-bank-filter[data-resource-filter]');
 const deleteModeToggle = document.getElementById('delete-mode-toggle');
 const heroImg = document.getElementById('hero-img');
 const searchInput = document.getElementById('search');
@@ -139,6 +163,12 @@ const adminPassword = document.getElementById('admin-password');
 const adminLoginSubmit = document.getElementById('admin-login-submit');
 const adminLoginMessage = document.getElementById('admin-login-message');
 const adminSessionPanel = document.getElementById('admin-session-panel');
+const adminSyncLocal = document.getElementById('admin-sync-local');
+const adminPushDb = document.getElementById('admin-push-db');
+const adminSyncMessage = document.getElementById('admin-sync-message');
+const adminPendingPush = document.getElementById('admin-pending-push');
+const adminPushReport = document.getElementById('admin-push-report');
+const adminPushReportPanel = document.getElementById('admin-push-report-panel');
 const adminLogout = document.getElementById('admin-logout');
 const confirmBg = document.getElementById('confirm-bg');
 const confirmDialog = document.getElementById('confirm-dialog');
@@ -181,7 +211,9 @@ const MODAL_LAYOUT_STORAGE_KEY = 'ron-lore-modal-layouts-v1';
 const MODAL_BLOCKS_STORAGE_KEY = 'ron-lore-modal-blocks-v1';
 const MISSION_DB_STORAGE_KEY = 'ron-lore-mission-db-v1';
 const MISSION_DB_INDEX_STORAGE_KEY = 'ron-lore-mission-db-index-v1';
+const MISSION_DB_PUSHED_STORAGE_KEY = 'ron-lore-mission-db-pushed-v1';
 const MISSION_NOTES_STORAGE_KEY = 'ron-lore-mission-notes-v1';
+const IMAGE_BANK_STORAGE_KEY = 'ron-lore-image-bank-v1';
 const API_BASE_URL = (
   window.RON_LORE_API_BASE ||
   document.querySelector('meta[name="ron-lore-api-base"]')?.content ||
@@ -209,6 +241,7 @@ const TIMELINE_SCALES = {
   year: { label: 'year', unitWidth: 260 }
 };
 const TAG_COLOR_OPTIONS = ['#e74c3c', '#f39c12', '#f1c40f', '#2ecc71', '#1abc9c', '#3498db', '#9b59b6', '#e84393', '#95a5a6', '#ffffff'];
+const BRIEF_TEXT_COLOR_OPTIONS = ['#e8e8e8', '#f2c94c', '#e74c3c', '#56cc9d', '#2d9cdb', '#bb6bd9'];
 const DEFAULT_TAG_COLORS = {
   gang: '#e67e22',
   terrorism: '#e74c3c',
@@ -244,6 +277,17 @@ let lastBlockCustomFocusedElement = null;
 let selectedEditColor = TAG_COLOR_OPTIONS[0];
 let pendingCustomColorReplacement = '';
 let isAdminAuthenticated = false;
+let activeResourceBankFilter = 'all';
+let activeResourceBankSearch = '';
+let activeImageContextId = '';
+let imageNameResolve = null;
+let lastImageNameFocusedElement = null;
+let activeBriefEditor = null;
+let savedBriefSelectionRange = null;
+let isBriefSelectionDragging = false;
+let briefSelectionTimer = null;
+let selectedBriefColor = BRIEF_TEXT_COLOR_OPTIONS[0];
+let isBriefColorPopoverOpen = false;
 
 function getApiUrl(path) {
   return `${API_BASE_URL}${path}`;
@@ -277,12 +321,24 @@ function setAdminLoginMessage(message = '', type = '') {
   adminLoginMessage.classList.toggle('success', type === 'success');
 }
 
+function setAdminSyncMessage(message = '', type = '') {
+  if (!adminSyncMessage) return;
+  adminSyncMessage.textContent = message;
+  adminSyncMessage.classList.toggle('error', type === 'error');
+  adminSyncMessage.classList.toggle('success', type === 'success');
+}
+
 function setAdminLoginLoading(isLoading) {
   if (adminLoginSubmit) {
     adminLoginSubmit.disabled = isLoading;
     adminLoginSubmit.textContent = isLoading ? 'Connexion...' : 'Connexion';
   }
   if (adminPassword) adminPassword.disabled = isLoading;
+}
+
+function setAdminSyncLoading(isLoading) {
+  if (adminSyncLocal) adminSyncLocal.disabled = isLoading || !isAdminAuthenticated;
+  if (adminPushDb) adminPushDb.disabled = isLoading || !isAdminAuthenticated;
 }
 
 function updateAdminLoginUi() {
@@ -298,6 +354,8 @@ function updateAdminLoginUi() {
   if (adminLoginForm) adminLoginForm.hidden = isAdminAuthenticated;
   if (adminSessionPanel) adminSessionPanel.hidden = !isAdminAuthenticated;
   if (adminPassword && isAdminAuthenticated) adminPassword.value = '';
+  setAdminSyncLoading(false);
+  updatePendingPushUi();
   if (!isAdminAuthenticated && !hasConfiguredApiBase()) {
     setAdminLoginMessage('Renseigne l’URL publique du Web Service Render dans la meta ron-lore-api-base.', 'error');
   }
@@ -315,6 +373,7 @@ function setAdminAuthenticated(authenticated) {
 
   if (isAdminAuthenticated && !wasAdminAuthenticated) {
     loadSavedTags();
+    loadSavedMissionDb();
     refreshBoardFromSearch();
     buildTimeline();
     buildPeopleBoard();
@@ -352,11 +411,7 @@ function setAdminAuthenticated(authenticated) {
   if (activeModalMission && activeModalDlc) {
     const modalTags = modalMeta.querySelector('.modal-tags');
     if (modalTags) renderTagEditor(modalTags, activeModalMission, activeModalDlc);
-    if (isAdminAuthenticated) {
-      restoreModalBlocks();
-      const savedLayout = getSavedModalLayout();
-      if (savedLayout) applySavedModalLayout(savedLayout);
-    }
+    refreshStructuredEditors();
     renderIntelPanel(activeModalMission, activeModalDlc);
   }
 }
@@ -491,6 +546,15 @@ function getMissionKey(dlc, mission) {
   return `${dlc.id}::${mission.name}`;
 }
 
+function makeSafeFileId(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'mission';
+}
+
 function getSavedTagMap() {
   try {
     return JSON.parse(localStorage.getItem(TAG_STORAGE_KEY)) || {};
@@ -618,12 +682,48 @@ function saveMissionTags(dlc, mission) {
   if (activeModalMissionKey === getMissionKey(dlc, mission)) syncActiveMissionDb();
 }
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value ?? null));
+}
+
+function createMissionSnapshot(mission) {
+  return {
+    tags: [...(mission.tags || [])],
+    summary: mission.brief || '',
+    summaryHtml: mission.briefHtml || '',
+    civilians: cloneJson(mission.civilians || []),
+    suspects: cloneJson(mission.suspects || []),
+    evidence: cloneJson(mission.evidence || [])
+  };
+}
+
+function valuesDiffer(left, right) {
+  return JSON.stringify(left ?? null) !== JSON.stringify(right ?? null);
+}
+
 function getMissionDbMap() {
   try {
     return JSON.parse(localStorage.getItem(MISSION_DB_STORAGE_KEY)) || {};
   } catch {
     return {};
   }
+}
+
+function loadSavedMissionDb() {
+  const dbMap = getMissionDbMap();
+  DATA.forEach(dlc => {
+    dlc.missions.forEach(mission => {
+      const saved = dbMap[getMissionKey(dlc, mission)];
+      if (!saved) return;
+
+      if (Array.isArray(saved.tags)) mission.tags = [...saved.tags];
+      if (typeof saved.summary === 'string') mission.brief = saved.summary;
+      if (typeof saved.summaryHtml === 'string') mission.briefHtml = saved.summaryHtml;
+      if (saved.people?.civilians) mission.civilians = [...saved.people.civilians];
+      if (saved.people?.suspects) mission.suspects = [...saved.people.suspects];
+      if (Array.isArray(saved.evidence)) mission.evidence = [...saved.evidence];
+    });
+  });
 }
 
 function saveMissionDbMap(dbMap) {
@@ -634,9 +734,93 @@ function saveMissionDbMap(dbMap) {
       updatedAt: new Date().toISOString(),
       missions: Object.values(dbMap)
     }));
+    updatePendingPushUi();
   } catch {
     // Mission DB generation still works for the current session if storage is unavailable.
   }
+}
+
+function getMissionDbPushedMap() {
+  try {
+    return JSON.parse(localStorage.getItem(MISSION_DB_PUSHED_STORAGE_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveMissionDbPushedMap(pushedMap) {
+  try {
+    localStorage.setItem(MISSION_DB_PUSHED_STORAGE_KEY, JSON.stringify(pushedMap));
+  } catch {
+    // Pending push status is only a local convenience.
+  }
+}
+
+function markMissionDbPushed(missions) {
+  const pushedMap = getMissionDbPushedMap();
+  missions.forEach(missionDb => {
+    pushedMap[missionDb.id] = missionDb.updatedAt || new Date().toISOString();
+  });
+  saveMissionDbPushedMap(pushedMap);
+  updatePendingPushUi();
+}
+
+function getPendingMissionDbs() {
+  const pushedMap = getMissionDbPushedMap();
+  return Object.values(getMissionDbMap()).filter(missionDb => pushedMap[missionDb.id] !== missionDb.updatedAt);
+}
+
+function getMissionDbDiffs(missionDb) {
+  const base = BASE_MISSION_SNAPSHOTS.get(missionDb.id) || {};
+  const diffs = [];
+  const savedTags = missionDb.tags || [];
+  const savedCivilians = missionDb.people?.civilians || [];
+  const savedSuspects = missionDb.people?.suspects || [];
+  const savedEvidence = missionDb.evidence || [];
+
+  if (valuesDiffer(savedTags, base.tags || [])) diffs.push(`Tags (${(base.tags || []).length} -> ${savedTags.length})`);
+  if ((missionDb.summary || '') !== (base.summary || '') || (missionDb.summaryHtml || '') !== (base.summaryHtml || '')) {
+    diffs.push('Briefing');
+  }
+  if (valuesDiffer(savedCivilians, base.civilians || [])) diffs.push(`Civils (${(base.civilians || []).length} -> ${savedCivilians.length})`);
+  if (valuesDiffer(savedSuspects, base.suspects || [])) diffs.push(`Suspects (${(base.suspects || []).length} -> ${savedSuspects.length})`);
+  if (valuesDiffer(savedEvidence, base.evidence || [])) diffs.push(`Preuves (${(base.evidence || []).length} -> ${savedEvidence.length})`);
+  if ((missionDb.visual?.blocks || []).length > 0) diffs.push('Blocs visuels');
+  if ((missionDb.visual?.sections || []).some(section => section.kind === 'custom' || Object.keys(section.style || {}).length > 0)) {
+    diffs.push('Colonnes / layout');
+  }
+  return diffs;
+}
+
+function renderPushReport() {
+  if (!adminPushReportPanel) return;
+  clearElement(adminPushReportPanel);
+  const pending = getPendingMissionDbs();
+  if (pending.length === 0) {
+    adminPushReportPanel.appendChild(makeTextElement('div', 'admin-report-empty', 'Aucune modification locale en attente de push.'));
+    return;
+  }
+
+  pending.forEach(missionDb => {
+    const item = document.createElement('div');
+    item.className = 'admin-report-item';
+    const diffs = getMissionDbDiffs(missionDb);
+    item.append(
+      makeTextElement('div', 'admin-report-title', missionDb.title || missionDb.id),
+      makeTextElement('div', 'admin-report-meta', `${missionDb.dlc?.name || 'DLC inconnu'} - ${diffs.join(', ') || 'Contenu sauvegarde'}`)
+    );
+    adminPushReportPanel.appendChild(item);
+  });
+}
+
+function updatePendingPushUi() {
+  if (!adminPendingPush || !adminPushReport) return;
+  const pendingCount = getPendingMissionDbs().length;
+  adminPendingPush.textContent = pendingCount === 0
+    ? 'Aucune modification en attente'
+    : `${pendingCount} fiche(s) avec modifications en attente de push`;
+  adminPushReport.disabled = pendingCount === 0;
+  if (!adminPushReportPanel?.hidden) renderPushReport();
 }
 
 function getSectionReadableTitle(section) {
@@ -681,6 +865,7 @@ function buildActiveMissionDb() {
     date: activeModalMission.date || '',
     tags: [...(activeModalMission.tags || [])],
     summary: activeModalMission.brief || '',
+    summaryHtml: activeModalMission.briefHtml || '',
     people: {
       civilians: [...(activeModalMission.civilians || [])],
       suspects: [...(activeModalMission.suspects || [])]
@@ -708,6 +893,78 @@ function syncActiveMissionDb() {
   const dbMap = getMissionDbMap();
   dbMap[missionDb.id] = missionDb;
   saveMissionDbMap(dbMap);
+}
+
+function syncCurrentMissionDbFromUi() {
+  if (!requireAdmin()) return false;
+  if (!activeModalMission || !activeModalDlc || !activeModalMissionKey) {
+    setAdminSyncMessage('Ouvre une fiche mission avant de sauvegarder.', 'error');
+    return false;
+  }
+  saveMissionNote();
+  saveModalBlocks();
+  saveModalLayout();
+  syncActiveMissionDb();
+  setAdminSyncMessage('Fiche sauvegardee localement.', 'success');
+  return true;
+}
+
+function getMissionDbPushId(missionDb) {
+  return makeSafeFileId(missionDb.missionId || missionDb.title || missionDb.id);
+}
+
+async function pushMissionDb(missionDb) {
+  const id = getMissionDbPushId(missionDb);
+  const payload = {
+    ...missionDb,
+    id,
+    localId: missionDb.id,
+    pushedAt: new Date().toISOString()
+  };
+  const response = await fetch(getApiUrl(`/data/missions/${encodeURIComponent(id)}`), {
+    method: 'PUT',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.error || `Push impossible pour ${id}`);
+  }
+  return body;
+}
+
+async function pushMissionDbMap() {
+  if (!requireAdmin()) return;
+  if (!hasConfiguredApiBase()) {
+    setAdminSyncMessage('Web Service Render non configure.', 'error');
+    return;
+  }
+
+  if (activeModalMission && activeModalDlc) syncCurrentMissionDbFromUi();
+  const missions = Object.values(getMissionDbMap());
+  if (missions.length === 0) {
+    setAdminSyncMessage('Aucune fiche locale a pousser.', 'error');
+    return;
+  }
+
+  setAdminSyncLoading(true);
+  setAdminSyncMessage(`Push backend en cours: ${missions.length} fiche(s)...`);
+  try {
+    for (const missionDb of missions) {
+      await pushMissionDb(missionDb);
+    }
+    markMissionDbPushed(missions);
+    setAdminSyncMessage(`Push backend termine: ${missions.length} fiche(s).`, 'success');
+  } catch (error) {
+    setAdminSyncMessage(error.message || 'Push backend impossible.', 'error');
+  } finally {
+    setAdminSyncLoading(false);
+  }
 }
 
 function getSavedModalLayouts() {
@@ -974,6 +1231,338 @@ function makeMetaItem(label, value) {
   return item;
 }
 
+function updateModalMetaCounts() {
+  modalMeta.querySelectorAll('.meta-item').forEach(item => {
+    const label = item.childNodes[0]?.textContent || '';
+    const value = item.querySelector('span');
+    if (!value) return;
+    if (label.includes('CIVILIANS')) value.textContent = (activeModalMission?.civilians || []).length;
+    if (label.includes('SUSPECTS')) value.textContent = (activeModalMission?.suspects || []).length;
+  });
+}
+
+function getResourceLabel(item, fallback) {
+  if (typeof item === 'string') return item || fallback;
+  return item?.name || item?.title || fallback;
+}
+
+function getResourceMeta(item) {
+  if (typeof item === 'string') return '';
+  if (item?.image || item?.img || item?.thumb) return 'Image';
+  if (item?.desc) return 'Texte';
+  return 'A compléter';
+}
+
+function getImageBankItems() {
+  try {
+    return JSON.parse(localStorage.getItem(IMAGE_BANK_STORAGE_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveImageBankItems(items) {
+  try {
+    localStorage.setItem(IMAGE_BANK_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // Image bank remains usable for the current session if storage quota is full.
+  }
+}
+
+function closeImageContextMenu() {
+  if (!imageContextMenu) return;
+  activeImageContextId = '';
+  imageContextMenu.classList.remove('open');
+  imageContextMenu.setAttribute('aria-hidden', 'true');
+}
+
+function openImageContextMenu(event, imageId) {
+  if (!imageContextMenu) return;
+  event.preventDefault();
+  activeImageContextId = imageId;
+  imageContextMenu.style.left = `${Math.min(event.clientX, window.innerWidth - 170)}px`;
+  imageContextMenu.style.top = `${Math.min(event.clientY, window.innerHeight - 100)}px`;
+  imageContextMenu.classList.add('open');
+  imageContextMenu.setAttribute('aria-hidden', 'false');
+}
+
+function showImageNameDialog(title, initialValue = '') {
+  lastImageNameFocusedElement = document.activeElement;
+  imageNameTitle.textContent = title;
+  imageNameInput.value = initialValue;
+  imageNameBg.classList.add('open');
+  imageNameBg.setAttribute('aria-hidden', 'false');
+  imageNameInput.focus();
+  imageNameInput.select();
+
+  return new Promise(resolve => {
+    imageNameResolve = resolve;
+  });
+}
+
+function closeImageNameDialog(value) {
+  if (!imageNameResolve) return;
+  const resolve = imageNameResolve;
+  imageNameResolve = null;
+  imageNameBg.classList.remove('open');
+  imageNameBg.setAttribute('aria-hidden', 'true');
+  if (lastImageNameFocusedElement) lastImageNameFocusedElement.focus();
+  resolve(value);
+}
+
+async function renameImageBankItem(imageId) {
+  const images = getImageBankItems();
+  const image = images.find(item => item.id === imageId);
+  if (!image) return;
+  const nextName = await showImageNameDialog('Renommer l’image', image.name);
+  if (!nextName) return;
+  image.name = nextName.trim() || image.name;
+  saveImageBankItems(images);
+  renderImageBank();
+  refreshStructuredEditors();
+}
+
+async function deleteImageBankItem(imageId) {
+  const images = getImageBankItems();
+  const image = images.find(item => item.id === imageId);
+  if (!image) return;
+  const confirmed = await showConfirm(`Supprimer "${image.name}" de la banque d’images ?`, 'Supprimer');
+  if (!confirmed) return;
+  saveImageBankItems(images.filter(item => item.id !== imageId));
+  renderImageBank();
+  refreshStructuredEditors();
+}
+
+function renderImageBank() {
+  if (!imageBank) return;
+  clearElement(imageBank);
+  const images = getImageBankItems();
+  if (images.length === 0) {
+    imageBank.appendChild(makeTextElement('div', 'image-bank-empty', 'Aucune image importée'));
+    return;
+  }
+
+  images.forEach(image => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'image-bank-item';
+    button.draggable = true;
+    button.dataset.imageUrl = image.dataUrl;
+    button.title = image.name;
+    button.append(
+      makeImage(image.dataUrl, image.name, ''),
+      makeTextElement('span', 'image-bank-caption', image.name)
+    );
+    button.addEventListener('contextmenu', event => openImageContextMenu(event, image.id));
+    button.addEventListener('dragstart', event => {
+      event.dataTransfer.effectAllowed = 'copy';
+      event.dataTransfer.setData('text/plain', image.dataUrl);
+      event.dataTransfer.setData('application/x-ron-lore-image', image.dataUrl);
+    });
+    button.addEventListener('click', () => {
+      navigator.clipboard?.writeText(image.dataUrl);
+      button.classList.add('copied');
+      window.setTimeout(() => button.classList.remove('copied'), 700);
+    });
+    imageBank.appendChild(button);
+  });
+}
+
+function getUploadSafeName(fileName) {
+  return String(fileName || 'image')
+    .replace(/\.[^.]+$/, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, 42) || 'image';
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function importImageBankFiles(files) {
+  const selectedFiles = [...files].filter(file => file.type === 'image/webp' || file.name.toLowerCase().endsWith('.webp'));
+  if (selectedFiles.length === 0) return;
+  const existing = getImageBankItems();
+  for (const file of selectedFiles) {
+    const dataUrl = await readFileAsDataUrl(file);
+    const defaultName = getUploadSafeName(file.name);
+    const requestedName = await showImageNameDialog('Nommer l’image', defaultName);
+    const name = String(requestedName || defaultName).trim() || defaultName;
+    existing.unshift({
+      id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name,
+      dataUrl,
+      type: 'image/webp',
+      createdAt: new Date().toISOString()
+    });
+  }
+  saveImageBankItems(existing.slice(0, 80));
+  renderImageBank();
+  refreshStructuredEditors();
+}
+
+function getResourceSearchText(resource) {
+  return [
+    resource.label,
+    resource.typeLabel,
+    resource.missionName,
+    resource.dlcName,
+    resource.meta
+  ].join(' ').toLowerCase();
+}
+
+function getAllResourceBankItems() {
+  const resources = [];
+  DATA.forEach(dlc => {
+    dlc.missions.forEach(mission => {
+      const missionKey = getMissionKey(dlc, mission);
+      (mission.civilians || []).forEach((item, index) => {
+        resources.push({
+          type: 'civilian',
+          typeLabel: 'Civil',
+          sectionId: 'civilians',
+          item,
+          index,
+          mission,
+          dlc,
+          missionKey,
+          missionName: mission.name,
+          dlcName: dlc.name,
+          label: getResourceLabel(item, `Civil ${index + 1}`),
+          meta: getResourceMeta(item)
+        });
+      });
+      (mission.suspects || []).forEach((item, index) => {
+        resources.push({
+          type: 'suspect',
+          typeLabel: 'Suspect',
+          sectionId: 'suspects',
+          item,
+          index,
+          mission,
+          dlc,
+          missionKey,
+          missionName: mission.name,
+          dlcName: dlc.name,
+          label: getResourceLabel(item, `Suspect ${index + 1}`),
+          meta: getResourceMeta(item)
+        });
+      });
+      (mission.evidence || []).forEach((item, index) => {
+        resources.push({
+          type: 'evidence',
+          typeLabel: 'Preuve',
+          sectionId: 'evidence',
+          item,
+          index,
+          mission,
+          dlc,
+          missionKey,
+          missionName: mission.name,
+          dlcName: dlc.name,
+          label: getResourceLabel(item, `Preuve ${index + 1}`),
+          meta: getResourceMeta(item)
+        });
+      });
+    });
+  });
+  return resources;
+}
+
+function getFilteredResourceBankItems() {
+  const query = activeResourceBankSearch.trim().toLowerCase();
+  return getAllResourceBankItems().filter(resource => {
+    const matchesType = activeResourceBankFilter === 'all' || resource.type === activeResourceBankFilter;
+    const matchesSearch = !query || getResourceSearchText(resource).includes(query);
+    return matchesType && matchesSearch;
+  });
+}
+
+function focusStructuredResource(type, index, sectionId) {
+  const selector = type === 'evidence'
+    ? `.section[data-section-id="${sectionId}"] .structured-evidence-card[data-index="${index}"]`
+    : `.section[data-section-id="${sectionId}"] .structured-person-card[data-person-type="${type}"][data-index="${index}"]`;
+  const card = modalGrid.querySelector(selector);
+  if (!card) return;
+  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  card.classList.add('resource-highlight');
+  window.setTimeout(() => card.classList.remove('resource-highlight'), 900);
+  card.querySelector('.structured-person-field')?.focus({ preventScroll: true });
+}
+
+function renderResourceBank() {
+  if (!resourceBank) return;
+  clearElement(resourceBank);
+  const resources = getFilteredResourceBankItems();
+  if (resources.length === 0) {
+    resourceBank.appendChild(makeTextElement('div', 'resource-bank-empty', 'Aucune ressource'));
+    return;
+  }
+
+  const groups = new Map();
+  resources.forEach(resource => {
+    const key = resource.missionKey;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        missionName: resource.missionName,
+        dlcName: resource.dlcName,
+        isActive: key === activeModalMissionKey,
+        items: []
+      });
+    }
+    groups.get(key).items.push(resource);
+  });
+
+  [...groups.values()].forEach(group => {
+    const section = document.createElement('section');
+    section.className = 'resource-bank-group';
+    section.classList.toggle('active', group.isActive);
+
+    const head = document.createElement('div');
+    head.className = 'resource-bank-head';
+    head.append(
+      makeTextElement('div', 'resource-bank-title', group.missionName),
+      makeTextElement('div', 'resource-bank-count', String(group.items.length))
+    );
+    head.appendChild(makeTextElement('div', 'resource-bank-context', group.dlcName));
+
+    const list = document.createElement('div');
+    list.className = 'resource-bank-list';
+    group.items.forEach(resource => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `resource-bank-item ${resource.type}`;
+      button.append(
+        makeTextElement('span', 'resource-bank-item-type', resource.typeLabel),
+        makeTextElement('span', 'resource-bank-item-name', resource.label),
+        makeTextElement('span', 'resource-bank-item-meta', resource.meta)
+      );
+      button.addEventListener('click', () => {
+        if (resource.missionKey !== activeModalMissionKey) {
+          openModal(resource.mission, resource.dlc);
+          setModalEditMode(true);
+        }
+        window.setTimeout(() => focusStructuredResource(resource.type, resource.index, resource.sectionId), 0);
+      });
+      list.appendChild(button);
+    });
+
+    section.append(head, list);
+    resourceBank.appendChild(section);
+  });
+}
+
+function renderEditorBanks() {
+  renderImageBank();
+  renderResourceBank();
+}
+
 function closeBlockLibrary() {
   blockLibrary.classList.remove('open');
   blockLibrary.setAttribute('aria-hidden', 'true');
@@ -992,14 +1581,41 @@ function setCustomBlocksEditable(isEditing) {
     field.readOnly = !isEditing;
     field.tabIndex = isEditing ? 0 : -1;
   });
+  updateSectionEditorControls(isEditing);
+}
+
+function updateSectionEditorControls(isEditing = activeModalEditMode) {
+  modalGrid.querySelectorAll('.section').forEach(section => {
+    section.querySelector(':scope > .editor-section-tools')?.remove();
+  });
+}
+
+function refreshStructuredEditors() {
+  const briefBody = modalGrid.querySelector('.section[data-section-id="brief"] .section-body');
+  if (briefBody && activeModalMission) {
+    renderBriefingSection(briefBody, activeModalMission);
+  }
+  const civiliansBody = modalGrid.querySelector('.section[data-section-id="civilians"] .section-body');
+  if (civiliansBody && activeModalMission) {
+    renderStructuredPeopleSection(civiliansBody, activeModalMission.civilians || [], 'civilian');
+  }
+  const suspectsBody = modalGrid.querySelector('.section[data-section-id="suspects"] .section-body');
+  if (suspectsBody && activeModalMission) {
+    renderStructuredPeopleSection(suspectsBody, activeModalMission.suspects || [], 'suspect');
+  }
+  const evidenceBody = modalGrid.querySelector('.section[data-section-id="evidence"] .section-body');
+  if (evidenceBody && activeModalMission) {
+    renderStructuredEvidenceSection(evidenceBody, activeModalMission.evidence || []);
+  }
+  renderResourceBank();
 }
 
 function setDeleteMode(isDeleting) {
   if (isDeleting && !requireAdmin()) return;
   activeDeleteMode = isDeleting;
   modalBg.classList.toggle('delete-mode', isDeleting);
-  deleteModeToggle.classList.toggle('active', isDeleting);
-  deleteModeToggle.setAttribute('aria-pressed', String(isDeleting));
+  deleteModeToggle?.classList.toggle('active', isDeleting);
+  deleteModeToggle?.setAttribute('aria-pressed', String(isDeleting));
 }
 
 function setModalEditMode(isEditing) {
@@ -1009,6 +1625,7 @@ function setModalEditMode(isEditing) {
   modalBg.classList.toggle('modal-editing', isEditing);
   editorBlockLibrary.setAttribute('aria-hidden', String(!isEditing));
   setCustomBlocksEditable(isEditing);
+  refreshStructuredEditors();
   if (!isEditing) {
     setDeleteMode(false);
     closeBlockLibrary();
@@ -1087,10 +1704,44 @@ function openBlockLibrary(button, section) {
 }
 
 function addCustomBlockHandle(block) {
-  if (block.querySelector(':scope > .custom-block-handle')) return;
-  const handle = makeTextElement('span', 'custom-block-handle', '::');
-  handle.setAttribute('aria-hidden', 'true');
-  block.prepend(handle);
+  if (block.querySelector(':scope > .editor-inline-tools')) return;
+  const toolbar = document.createElement('div');
+  toolbar.className = 'editor-inline-tools';
+
+  const moveButton = makeEditorToolButton('editor-drag-handle', 'Deplacer', '↕');
+  const deleteButton = makeEditorToolButton('editor-delete-action danger', 'Supprimer', '×');
+
+  toolbar.appendChild(moveButton);
+  if (block.classList.contains('custom-block-text') || block.classList.contains('custom-block-separator')) {
+    toolbar.appendChild(makeEditorToolButton('editor-style-action', 'Modifier le style', '✎'));
+  }
+  toolbar.appendChild(deleteButton);
+  block.prepend(toolbar);
+}
+
+function makeEditorToolButton(className, label, text) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `editor-tool-btn ${className}`;
+  button.textContent = text;
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  return button;
+}
+
+function ensureSectionEditorControls(section) {
+  if (section.querySelector(':scope > .editor-section-tools')) return;
+  const toolbar = document.createElement('div');
+  toolbar.className = 'editor-section-tools';
+  toolbar.append(
+    makeEditorToolButton('editor-add-action', 'Ajouter un bloc ici', '+'),
+    makeEditorToolButton('editor-drag-handle', 'Deplacer la section', '↕'),
+    makeEditorToolButton('editor-style-action', 'Modifier le style', '✎')
+  );
+  if (section.classList.contains('custom-section')) {
+    toolbar.appendChild(makeEditorToolButton('editor-delete-action danger', 'Supprimer la colonne', '×'));
+  }
+  section.appendChild(toolbar);
 }
 
 function makeTextCustomBlock(text = 'Nouveau bloc texte') {
@@ -1209,6 +1860,20 @@ function applyElementStyleSnapshot(element, style = {}) {
   if (style.left || style.top || style.width || style.minHeight) element.dataset.canvasReady = 'true';
 }
 
+function setBlockPlacementMode(block, mode) {
+  if (!block) return;
+  block.dataset.placement = mode === 'free' ? 'free' : 'flow';
+  if (block.dataset.placement === 'flow') {
+    block.style.left = '';
+    block.style.top = '';
+    delete block.dataset.canvasReady;
+  }
+}
+
+function isFreePlacedBlock(block) {
+  return block?.dataset.placement === 'free';
+}
+
 function getColorValue(value, fallback = '#e74c3c') {
   return /^#[0-9a-f]{6}$/i.test(value || '') ? value : fallback;
 }
@@ -1285,9 +1950,11 @@ function serializeCustomBlock(block) {
   const type = getCustomBlockType(block);
   if (!type) return null;
   const parentSection = block.closest('.section');
+  const parent = block.parentElement === modalGrid ? 'canvas' : parentSection?.dataset.sectionId || 'canvas';
   const data = {
     type,
-    parent: block.parentElement === modalGrid ? 'canvas' : parentSection?.dataset.sectionId || 'canvas',
+    parent,
+    placement: parent === 'canvas' ? 'free' : block.dataset.placement || 'flow',
     style: getElementStyleSnapshot(block),
     custom: getBlockCustomData(block)
   };
@@ -1327,7 +1994,11 @@ function hydrateCustomBlock(data) {
     const label = block.querySelector('.custom-block-separator-label');
     if (label) label.textContent = data.label || 'Section';
   }
-  if (block) applyElementStyleSnapshot(block, data.style);
+  const inferredPlacement = data.parent === 'canvas' || data.style?.left || data.style?.top ? 'free' : 'flow';
+  if (block) setBlockPlacementMode(block, data.placement || inferredPlacement);
+  if (block && isFreePlacedBlock(block)) applyElementStyleSnapshot(block, data.style);
+  if (block && !isFreePlacedBlock(block) && data.style?.width) block.style.width = data.style.width;
+  if (block && !isFreePlacedBlock(block) && data.style?.minHeight) block.style.minHeight = data.style.minHeight;
   if (block) applyBlockCustomData(block, data.custom);
   if (block) setCustomBlocksEditable(activeModalEditMode);
   return block;
@@ -1398,20 +2069,27 @@ function restoreModalBlocks() {
   setCustomBlocksEditable(activeModalEditMode);
 }
 
-function appendCustomBlock(section, type) {
+function appendCustomBlock(section, type, options = {}) {
   if (!requireAdmin()) return;
-  const isCanvasBlock = activeModalEditMode && modal.classList.contains('editing');
+  const isCanvasBlock = activeModalEditMode && modal.classList.contains('editing') && !options.forceSection;
   const body = isCanvasBlock ? modalGrid : section?.querySelector('.section-body');
   if (!body) return;
   if (!isCanvasBlock) body.querySelectorAll('.empty-text').forEach(placeholder => placeholder.remove());
+  if (!isCanvasBlock) body.classList.add('custom-grid-body');
 
   const placeCanvasBlock = block => {
     if (!isCanvasBlock) return;
     const count = modalGrid.querySelectorAll(':scope > .custom-block').length;
+    setBlockPlacementMode(block, 'free');
     block.style.left = `${24 + count * 24}px`;
     block.style.top = `${24 + count * 24}px`;
     block.style.width = '280px';
     block.dataset.canvasReady = 'true';
+  };
+  const placeSectionBlock = block => {
+    if (isCanvasBlock || !activeModalEditMode) return;
+    setBlockPlacementMode(block, 'flow');
+    block.style.width = '';
   };
   const placeCanvasSection = section => {
     if (!isCanvasBlock) return;
@@ -1426,12 +2104,14 @@ function appendCustomBlock(section, type) {
   if (type === 'text') {
     const block = makeTextCustomBlock();
     placeCanvasBlock(block);
+    placeSectionBlock(block);
     body.appendChild(block);
     setCustomBlocksEditable(activeModalEditMode);
     block.querySelector('.custom-block-content')?.focus();
   } else if (type === 'image') {
     const imageBlock = makeImageCustomBlock();
     placeCanvasBlock(imageBlock);
+    placeSectionBlock(imageBlock);
     body.appendChild(imageBlock);
     setCustomBlocksEditable(activeModalEditMode);
     imageBlock.querySelector('.custom-block-field')?.focus();
@@ -1447,6 +2127,7 @@ function appendCustomBlock(section, type) {
   } else if (type === 'link') {
     const linkBlock = makeLinkCustomBlock();
     placeCanvasBlock(linkBlock);
+    placeSectionBlock(linkBlock);
     body.appendChild(linkBlock);
     setCustomBlocksEditable(activeModalEditMode);
     linkBlock.querySelector('.custom-block-field')?.focus();
@@ -1471,10 +2152,12 @@ function appendCustomBlock(section, type) {
     placeCanvasSection(column);
     modalGrid.appendChild(column);
     setCustomBlocksEditable(activeModalEditMode);
+    ensureSectionEditorControls(column);
     column.querySelector('.section-header')?.focus();
   } else if (type === 'separator') {
     const separator = makeSeparatorCustomBlock();
     placeCanvasBlock(separator);
+    placeSectionBlock(separator);
     body.appendChild(separator);
     setCustomBlocksEditable(activeModalEditMode);
     separator.querySelector('.custom-block-separator-label')?.focus();
@@ -2131,12 +2814,13 @@ function closeEdit(result) {
 }
 
 function getCustomizableTarget(target) {
-  const section = target.closest('#modal-grid .section');
-  if (section) return section;
-  return target.closest('#modal-grid .custom-block-text, #modal-grid .custom-block-separator');
+  const block = target.closest('#modal-grid .custom-block-text, #modal-grid .custom-block-separator');
+  if (block) return block;
+  return target.closest('#modal-grid .section');
 }
 
 function openBlockCustom(target) {
+  return;
   if (!requireAdmin()) return;
   activeCustomBlockTarget = target;
   lastBlockCustomFocusedElement = document.activeElement;
@@ -2349,64 +3033,42 @@ function openModal(mission, dlc) {
   modalMeta.appendChild(tags);
 
   clearElement(modalGrid);
+  modalGrid.classList.remove('has-saved-layout');
 
-  // Mission Brief
-  if (mission.brief) {
-    const brief = makeSection('MISSION BRIEF');
-    brief.dataset.sectionId = 'brief';
-    brief.querySelector('.section-body').appendChild(makeTextElement('p', '', mission.brief));
-    modalGrid.appendChild(brief);
-  }
+  // Briefing
+  const brief = makeSection('BRIEFING');
+  brief.dataset.sectionId = 'brief';
+  renderBriefingSection(brief.querySelector('.section-body'), mission);
+  modalGrid.appendChild(brief);
 
   // Civilians
   const civSection = makeSection('CIVILIANS');
   civSection.dataset.sectionId = 'civilians';
   const civBody = civSection.querySelector('.section-body');
-  if (!mission.civilians || mission.civilians.length === 0) {
-    civBody.appendChild(makeEmptyText('// NO CIVILIANS REPORTED'));
-  } else {
-    mission.civilians.forEach((c, i) => {
-      civBody.appendChild(makeItem(i + 1, c.name, c.desc));
-    });
-  }
+  renderStructuredPeopleSection(civBody, mission.civilians || [], 'civilian');
   modalGrid.appendChild(civSection);
 
   // Suspects
   const susSection = makeSection('SUSPECTS');
   susSection.dataset.sectionId = 'suspects';
   const susBody = susSection.querySelector('.section-body');
-  if (!mission.suspects || mission.suspects.length === 0) {
-    susBody.appendChild(makeEmptyText('// UNKNOWN'));
-  } else {
-    mission.suspects.forEach((s, i) => {
-      susBody.appendChild(makeItem(i + 1, s.name, s.desc));
-    });
-  }
+  renderStructuredPeopleSection(susBody, mission.suspects || [], 'suspect');
   modalGrid.appendChild(susSection);
 
   // Evidence
   const evSection = makeSection('EVIDENCE ROOM');
   evSection.dataset.sectionId = 'evidence';
   const evBody = evSection.querySelector('.section-body');
-  if (!mission.evidence || mission.evidence.length === 0) {
-    evBody.appendChild(makeEmptyText('// NO EVIDENCE LOGGED'));
-  } else {
-    mission.evidence.forEach((e, i) => {
-      evBody.appendChild(makeItem(i + 1, typeof e === 'string' ? e : e.name, typeof e === 'object' ? e.desc : ''));
-    });
-  }
+  renderStructuredEvidenceSection(evBody, mission.evidence || []);
   modalGrid.appendChild(evSection);
   renderIntelPanel(mission, dlc);
 
   modalBg.classList.add('open');
   modalBg.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
-  if (requireAdmin()) restoreModalBlocks();
+  // Structured edit mode replaces the old free-block editor.
   setCustomBlocksEditable(false);
-  if (requireAdmin()) {
-    const savedLayout = getSavedModalLayout();
-    if (savedLayout) applySavedModalLayout(savedLayout);
-  }
+  renderResourceBank();
   modalClose.focus();
 }
 
@@ -2451,39 +3113,32 @@ function renderTagEditor(container, mission, dlc) {
   editButton.textContent = '✎';
   editButton.title = activeModalEditMode ? 'Quitter le mode édition' : 'Passer en mode édition';
   editButton.setAttribute('aria-label', editButton.title);
+  editButton.textContent = activeModalEditMode ? 'Terminer' : 'Editer';
   editButton.classList.toggle('active', activeModalEditMode);
   editButton.setAttribute('aria-pressed', String(activeModalEditMode));
   editButton.addEventListener('click', () => {
     const shouldEdit = !activeModalEditMode;
     if (shouldEdit) {
-      layoutModalCanvas();
       setModalEditMode(true);
     } else {
-      saveModalBlocks();
-      saveModalLayout();
+      syncActiveMissionDb();
       setModalEditMode(false);
-      applySavedModalLayout(getSavedModalLayout());
     }
     renderTagEditor(container, mission, dlc);
   });
   container.appendChild(editButton);
 
   if (activeModalEditMode) {
-    const resetButton = document.createElement('button');
-    resetButton.type = 'button';
-    resetButton.className = 'tag tag-add modal-layout-reset';
-    resetButton.textContent = '↻';
-    resetButton.title = 'Réinitialiser la position des supra blocs';
-    resetButton.setAttribute('aria-label', resetButton.title);
-    resetButton.addEventListener('click', () => {
-      closeBlockLibrary();
-      deleteSavedModalLayout();
-      setModalEditMode(false);
-      clearModalCanvasLayout();
-      layoutModalCanvas();
-      setModalEditMode(true);
+    const saveButton = document.createElement('button');
+    saveButton.type = 'button';
+    saveButton.className = 'tag tag-add modal-save-action';
+    saveButton.textContent = 'SAVE';
+    saveButton.title = 'Sauvegarder les modifications en local';
+    saveButton.setAttribute('aria-label', saveButton.title);
+    saveButton.addEventListener('click', () => {
+      syncCurrentMissionDbFromUi();
     });
-    container.appendChild(resetButton);
+    container.appendChild(saveButton);
   }
 }
 
@@ -2593,11 +3248,425 @@ function makeSection(title) {
   return sec;
 }
 
+function getPersonPlaceholder(type, field) {
+  const labels = {
+    civilian: {
+      add: 'AJOUTER UN CIVIL',
+      empty: '// Aucun civil renseigne',
+      name: 'Civil inconnu',
+      desc: 'Description manquante',
+      image: 'Image manquante'
+    },
+    suspect: {
+      add: 'AJOUTER UN SUSPECT',
+      empty: '// Aucun suspect renseigne',
+      name: 'Suspect inconnu',
+      desc: 'Description manquante',
+      image: 'Image manquante'
+    }
+  };
+  return labels[type]?.[field] || '';
+}
+
+function renderStructuredImageDrop(imageWrap, imageUrl, label, emptyLabel = 'Image manquante') {
+  clearElement(imageWrap);
+  imageWrap.dataset.field = 'image';
+  imageWrap.tabIndex = activeModalEditMode ? 0 : -1;
+  imageWrap.setAttribute('aria-label', activeModalEditMode ? 'Déposer une image depuis la banque' : emptyLabel);
+  if (imageUrl) {
+    imageWrap.appendChild(makeImage(imageUrl, label, ''));
+  } else {
+    imageWrap.appendChild(makeTextElement('span', '', emptyLabel));
+  }
+}
+
+function getStructuredCardCollection(card) {
+  if (!activeModalMission || !card) return null;
+  const index = Number(card.dataset.index);
+  if (!Number.isInteger(index)) return null;
+
+  if (card.classList.contains('structured-evidence-card')) {
+    if (typeof activeModalMission.evidence?.[index] === 'string') {
+      activeModalMission.evidence[index] = { name: activeModalMission.evidence[index], desc: '', image: '' };
+    }
+    return { collection: activeModalMission.evidence, index, type: 'evidence' };
+  }
+  if (card.dataset.personType === 'civilian') {
+    return { collection: activeModalMission.civilians, index, type: 'civilian' };
+  }
+  if (card.dataset.personType === 'suspect') {
+    return { collection: activeModalMission.suspects, index, type: 'suspect' };
+  }
+  return null;
+}
+
+function updateStructuredCardImage(card, imageUrl) {
+  const target = getStructuredCardCollection(card);
+  if (!target?.collection?.[target.index]) return;
+  target.collection[target.index].image = imageUrl;
+
+  const item = target.collection[target.index];
+  const imageWrap = card.querySelector('.structured-person-image');
+  const label = item.name || getPersonPlaceholder(target.type, 'name') || 'Preuve';
+  const emptyLabel = getPersonPlaceholder(target.type, 'image') || 'Image manquante';
+  if (imageWrap) renderStructuredImageDrop(imageWrap, imageUrl, label, emptyLabel);
+
+  renderIntelPanel(activeModalMission, activeModalDlc);
+  syncActiveMissionDb();
+  renderResourceBank();
+}
+
+function getDroppedImageBankUrl(dataTransfer) {
+  const imageUrl = dataTransfer.getData('application/x-ron-lore-image') || dataTransfer.getData('text/plain');
+  if (!imageUrl) return '';
+  return getImageBankItems().some(image => image.dataUrl === imageUrl) ? imageUrl : '';
+}
+
+function makeStructuredPersonCard(person, index, type) {
+  const card = document.createElement('article');
+  card.className = 'structured-person-card';
+  card.dataset.personType = type;
+  card.dataset.index = String(index);
+
+  const imageWrap = document.createElement('div');
+  imageWrap.className = 'structured-person-image';
+  const imageUrl = person.image || person.img || person.thumb || '';
+  renderStructuredImageDrop(imageWrap, imageUrl, person.name || getPersonPlaceholder(type, 'name'), getPersonPlaceholder(type, 'image'));
+
+  const name = makeTextElement('div', 'structured-person-name', person.name || getPersonPlaceholder(type, 'name'));
+  const desc = makeTextElement('div', 'structured-person-desc', person.desc || getPersonPlaceholder(type, 'desc'));
+
+  const form = document.createElement('div');
+  form.className = 'structured-person-form';
+  const nameInput = document.createElement('input');
+  nameInput.className = 'structured-person-field';
+  nameInput.dataset.field = 'name';
+  nameInput.value = person.name || '';
+  nameInput.placeholder = getPersonPlaceholder(type, 'name');
+  nameInput.autocomplete = 'off';
+
+  const descInput = document.createElement('textarea');
+  descInput.className = 'structured-person-field';
+  descInput.dataset.field = 'desc';
+  descInput.value = person.desc || '';
+  descInput.placeholder = getPersonPlaceholder(type, 'desc');
+  descInput.rows = 3;
+
+  form.append(nameInput, descInput);
+  card.append(imageWrap, name, desc, form);
+  return card;
+}
+
+function renderStructuredPeopleSection(body, people, type) {
+  body.querySelector('.structured-person-list')?.remove();
+  body.querySelector('.structured-add-zone')?.remove();
+  body.querySelectorAll(':scope > .empty-text').forEach(item => item.remove());
+
+  const list = document.createElement('div');
+  list.className = 'structured-person-list';
+  if (people.length === 0) {
+    list.appendChild(makeEmptyText(getPersonPlaceholder(type, 'empty')));
+  } else {
+    people.forEach((person, index) => {
+      list.appendChild(makeStructuredPersonCard(person, index, type));
+    });
+  }
+
+  const addZone = document.createElement('button');
+  addZone.type = 'button';
+  addZone.className = 'structured-add-zone';
+  addZone.dataset.personType = type;
+  addZone.textContent = getPersonPlaceholder(type, 'add');
+
+  body.prepend(addZone, list);
+}
+
+function normalizeEvidenceItem(item) {
+  return typeof item === 'string' ? { name: item, desc: '', image: '' } : {
+    name: item?.name || '',
+    desc: item?.desc || '',
+    image: item?.image || item?.img || item?.thumb || ''
+  };
+}
+
+function makeStructuredEvidenceCard(item, index) {
+  const evidence = normalizeEvidenceItem(item);
+  const card = document.createElement('article');
+  card.className = 'structured-person-card structured-evidence-card';
+  card.dataset.index = String(index);
+
+  const imageWrap = document.createElement('div');
+  imageWrap.className = 'structured-person-image';
+  renderStructuredImageDrop(imageWrap, evidence.image, evidence.name || 'Preuve', 'Image manquante');
+
+  const name = makeTextElement('div', 'structured-person-name', evidence.name || 'Preuve sans titre');
+  const desc = makeTextElement('div', 'structured-person-desc', evidence.desc || 'Description manquante');
+
+  const form = document.createElement('div');
+  form.className = 'structured-person-form';
+  const nameInput = document.createElement('input');
+  nameInput.className = 'structured-person-field structured-evidence-field';
+  nameInput.dataset.field = 'name';
+  nameInput.value = evidence.name;
+  nameInput.placeholder = 'Titre de la preuve';
+  nameInput.autocomplete = 'off';
+
+  const descInput = document.createElement('textarea');
+  descInput.className = 'structured-person-field structured-evidence-field';
+  descInput.dataset.field = 'desc';
+  descInput.value = evidence.desc;
+  descInput.placeholder = 'Description';
+  descInput.rows = 3;
+
+  form.append(nameInput, descInput);
+  card.append(imageWrap, name, desc, form);
+  return card;
+}
+
+function renderStructuredEvidenceSection(body, evidence) {
+  body.querySelector('.structured-evidence-list')?.remove();
+  body.querySelector('.structured-evidence-add')?.remove();
+  body.querySelectorAll(':scope > .empty-text').forEach(item => item.remove());
+
+  const list = document.createElement('div');
+  list.className = 'structured-person-list structured-evidence-list';
+  if (evidence.length === 0) {
+    list.appendChild(makeEmptyText('// Aucune preuve renseignee'));
+  } else {
+    evidence.forEach((item, index) => {
+      list.appendChild(makeStructuredEvidenceCard(item, index));
+    });
+  }
+
+  const addZone = document.createElement('button');
+  addZone.type = 'button';
+  addZone.className = 'structured-add-zone structured-evidence-add';
+  addZone.textContent = 'AJOUTER UNE PREUVE';
+
+  body.prepend(addZone, list);
+}
+
+function getBriefHtml(mission) {
+  if (mission.briefHtml) return mission.briefHtml;
+  if (mission.brief) {
+    const paragraph = document.createElement('p');
+    paragraph.textContent = mission.brief;
+    return paragraph.outerHTML;
+  }
+  return '';
+}
+
+function renderBriefingSection(body, mission) {
+  clearElement(body);
+  const editor = document.createElement('div');
+  editor.className = 'brief-editor';
+  editor.dataset.placeholder = '// Aucun briefing renseigné';
+  editor.innerHTML = getBriefHtml(mission);
+  editor.contentEditable = String(activeModalEditMode);
+  editor.spellcheck = false;
+  editor.tabIndex = activeModalEditMode ? 0 : -1;
+  body.appendChild(editor);
+}
+
+function hideBriefFormatToolbar() {
+  if (!briefFormatToolbar) return;
+  savedBriefSelectionRange = null;
+  closeBriefColorPopover();
+  briefFormatToolbar.classList.remove('open');
+  briefFormatToolbar.setAttribute('aria-hidden', 'true');
+}
+
+function renderBriefColorPalette() {
+  if (!briefFormatColors) return;
+  clearElement(briefFormatColors);
+  BRIEF_TEXT_COLOR_OPTIONS.forEach(color => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'brief-color-swatch brief-preset-color';
+    button.dataset.color = color;
+    button.style.setProperty('--brief-color', color);
+    button.title = color;
+    button.setAttribute('aria-label', `Couleur ${color}`);
+    button.classList.toggle('selected', color === selectedBriefColor);
+    button.addEventListener('click', () => {
+      applyBriefColor(color);
+    });
+    briefFormatColors.appendChild(button);
+  });
+}
+
+function renderBriefCustomColorGrid() {
+  if (!briefCustomColors) return;
+  clearElement(briefCustomColors);
+  const colors = getCustomTagColors();
+
+  for (let i = 0; i < MAX_CUSTOM_TAG_COLORS; i++) {
+    const color = colors[i] || '';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'brief-color-swatch brief-custom-color-slot';
+
+    if (color) {
+      button.dataset.color = color.toLowerCase();
+      button.style.setProperty('--brief-color', color);
+      button.title = color;
+      button.setAttribute('aria-label', `Couleur personnalisée ${color}`);
+      button.classList.toggle('selected', color.toLowerCase() === selectedBriefColor);
+      button.addEventListener('click', () => applyBriefColor(color));
+    } else {
+      button.classList.add('empty');
+      button.title = 'Enregistrer la couleur actuelle';
+      button.setAttribute('aria-label', 'Enregistrer la couleur actuelle');
+      button.addEventListener('click', () => saveBriefSelectedColor());
+    }
+
+    briefCustomColors.appendChild(button);
+  }
+}
+
+function updateBriefContentFromEditor(editor) {
+  if (!activeModalMission || !editor) return;
+  activeModalMission.briefHtml = editor.innerHTML;
+  activeModalMission.brief = editor.textContent.trim();
+  syncActiveMissionDb();
+}
+
+function normalizeHexColor(color) {
+  const option = document.createElement('option');
+  option.style.color = color;
+  document.body.appendChild(option);
+  const normalized = getComputedStyle(option).color;
+  option.remove();
+  const match = normalized.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+  if (!match) return /^#[0-9a-f]{6}$/i.test(color) ? color : selectedBriefColor;
+  return `#${match.slice(1).map(value => Number(value).toString(16).padStart(2, '0')).join('')}`;
+}
+
+function getSelectedBriefColor() {
+  const value = document.queryCommandValue('foreColor');
+  if (!value) return selectedBriefColor;
+  return normalizeHexColor(value).toLowerCase();
+}
+
+function setSelectedBriefColor(color) {
+  selectedBriefColor = color.toLowerCase();
+  if (briefFormatColor) briefFormatColor.value = selectedBriefColor;
+  briefColorPreview?.style.setProperty('--brief-color', selectedBriefColor);
+  briefFormatColors?.querySelectorAll('.brief-color-swatch').forEach(button => {
+    button.classList.toggle('selected', button.dataset.color === selectedBriefColor);
+  });
+  briefCustomColors?.querySelectorAll('.brief-color-swatch').forEach(button => {
+    button.classList.toggle('selected', button.dataset.color === selectedBriefColor);
+  });
+}
+
+function getBriefEditorFromSelection(selection) {
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+  const range = selection.getRangeAt(0);
+  const container = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+    ? range.commonAncestorContainer
+    : range.commonAncestorContainer.parentElement;
+  const editor = container?.closest?.('.brief-editor') || null;
+  if (!editor || !editor.contains(range.startContainer) || !editor.contains(range.endContainer)) return null;
+  return editor;
+}
+
+function scheduleBriefFormatToolbar(delay = 0) {
+  window.clearTimeout(briefSelectionTimer);
+  briefSelectionTimer = window.setTimeout(showBriefFormatToolbar, delay);
+}
+
+function openBriefColorPopover() {
+  if (!briefColorPopover || !briefColorToggle) return;
+  isBriefColorPopoverOpen = true;
+  renderBriefColorPalette();
+  renderBriefCustomColorGrid();
+  setSelectedBriefColor(selectedBriefColor);
+  briefColorPopover.classList.add('open');
+  briefColorPopover.setAttribute('aria-hidden', 'false');
+  briefColorToggle.setAttribute('aria-expanded', 'true');
+}
+
+function closeBriefColorPopover() {
+  if (!briefColorPopover || !briefColorToggle) return;
+  isBriefColorPopoverOpen = false;
+  briefColorPopover.classList.remove('open');
+  briefColorPopover.setAttribute('aria-hidden', 'true');
+  briefColorToggle.setAttribute('aria-expanded', 'false');
+}
+
+function toggleBriefColorPopover() {
+  if (isBriefColorPopoverOpen) {
+    closeBriefColorPopover();
+  } else {
+    openBriefColorPopover();
+  }
+}
+
+function positionBriefFormatToolbar(rect) {
+  const toolbarWidth = briefFormatToolbar.offsetWidth || 320;
+  const left = rect.left + rect.width / 2 - toolbarWidth / 2;
+  briefFormatToolbar.style.left = `${Math.max(12, Math.min(left, window.innerWidth - toolbarWidth - 12))}px`;
+  briefFormatToolbar.style.top = `${Math.max(12, rect.top - briefFormatToolbar.offsetHeight - 10)}px`;
+}
+
+function showBriefFormatToolbar() {
+  if (!activeModalEditMode || !briefFormatToolbar) return;
+  if (isBriefSelectionDragging) return;
+  const selection = window.getSelection();
+  const editor = getBriefEditorFromSelection(selection);
+  if (!editor) {
+    hideBriefFormatToolbar();
+    return;
+  }
+
+  activeBriefEditor = editor;
+  savedBriefSelectionRange = selection.getRangeAt(0).cloneRange();
+  selectedBriefColor = getSelectedBriefColor();
+  setSelectedBriefColor(selectedBriefColor);
+  if (isBriefColorPopoverOpen) {
+    renderBriefColorPalette();
+    renderBriefCustomColorGrid();
+    setSelectedBriefColor(selectedBriefColor);
+  }
+  const rect = selection.getRangeAt(0).getBoundingClientRect();
+  briefFormatToolbar.classList.add('open');
+  briefFormatToolbar.setAttribute('aria-hidden', 'false');
+  positionBriefFormatToolbar(rect);
+}
+
+function applyBriefCommand(command, value = null) {
+  if (!activeBriefEditor) return;
+  activeBriefEditor.focus();
+  if (savedBriefSelectionRange) {
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(savedBriefSelectionRange);
+  }
+  document.execCommand(command, false, value);
+  const selection = window.getSelection();
+  if (selection?.rangeCount) savedBriefSelectionRange = selection.getRangeAt(0).cloneRange();
+  updateBriefContentFromEditor(activeBriefEditor);
+  showBriefFormatToolbar();
+}
+
+function applyBriefColor(color) {
+  setSelectedBriefColor(color);
+  applyBriefCommand('foreColor', color);
+}
+
+function saveBriefSelectedColor() {
+  const result = rememberCustomTagColor(selectedBriefColor);
+  if (result === 'full') {
+    replaceCustomTagColor(0, selectedBriefColor);
+  }
+  if (result === 'saved' || result === 'full') {
+    renderBriefCustomColorGrid();
+    setSelectedBriefColor(selectedBriefColor);
+  }
+}
+
 function getCanvasDraggable(target) {
-  if (!activeModalEditMode || !modal.classList.contains('editing')) return null;
-  const block = target.closest('.custom-block');
-  if (block && target.closest('.custom-block-handle')) return block;
-  if (target.closest('.section-header')) return target.closest('.section');
   return null;
 }
 
@@ -2615,6 +3684,7 @@ function moveCustomBlockToCanvas(block, rect, gridRect) {
   if (block.parentElement === modalGrid) return;
   const previousBody = block.closest('.section-body');
   modalGrid.appendChild(block);
+  setBlockPlacementMode(block, 'free');
   block.style.left = `${snapToGrid(rect.left - gridRect.left + modalGrid.scrollLeft)}px`;
   block.style.top = `${snapToGrid(rect.top - gridRect.top + modalGrid.scrollTop)}px`;
   block.style.width = `${Math.max(220, rect.width)}px`;
@@ -2640,6 +3710,7 @@ function dropCustomBlockIntoSection(block, section, event) {
   body.querySelectorAll('.empty-text').forEach(placeholder => placeholder.remove());
   body.classList.add('custom-grid-body');
   body.appendChild(block);
+  setBlockPlacementMode(block, 'free');
   block.style.left = `${snapToGrid(event.clientX - bodyRect.left - editingDrag.offsetX + body.scrollLeft)}px`;
   block.style.top = `${snapToGrid(event.clientY - bodyRect.top - editingDrag.offsetY + body.scrollTop)}px`;
   block.style.width = `${Math.max(180, blockRect.width)}px`;
@@ -2663,15 +3734,23 @@ function closeModal() {
 
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && modalBg.classList.contains('open') && activeModalEditMode) {
-    if (!requireAdmin()) return;
     e.preventDefault();
-    appendCustomBlock(activeBlockTarget || modalGrid.querySelector('.section'), 'link');
-    closeBlockLibrary();
     return;
   }
 
   if (e.key === 'Escape' && blockLibrary.classList.contains('open')) {
     closeBlockLibrary();
+    return;
+  }
+
+  if (e.key === 'Escape' && imageContextMenu?.classList.contains('open')) {
+    closeImageContextMenu();
+    return;
+  }
+
+  if (imageNameBg?.classList.contains('open')) {
+    if (e.key === 'Escape') closeImageNameDialog(null);
+    trapFocus(e, imageNameDialog);
     return;
   }
 
@@ -2719,6 +3798,58 @@ missionNotes.addEventListener('input', saveMissionNote);
 
 modalGrid.addEventListener('click', e => {
   if (!requireAdmin()) return;
+  const structuredAdd = e.target.closest('.structured-add-zone');
+  if (structuredAdd && activeModalEditMode) {
+    e.preventDefault();
+    e.stopPropagation();
+    const type = structuredAdd.dataset.personType;
+    if (!activeModalMission) return;
+    if (type === 'civilian' || type === 'suspect') {
+      const key = type === 'civilian' ? 'civilians' : 'suspects';
+      activeModalMission[key] = [...(activeModalMission[key] || []), { name: '', desc: '', image: '' }];
+      refreshStructuredEditors();
+      updateModalMetaCounts();
+      syncActiveMissionDb();
+      renderResourceBank();
+      modalGrid.querySelector(`.structured-person-card[data-person-type="${type}"][data-index="${activeModalMission[key].length - 1}"] .structured-person-field`)?.focus();
+    } else if (structuredAdd.classList.contains('structured-evidence-add')) {
+      activeModalMission.evidence = [...(activeModalMission.evidence || []), { name: '', desc: '', image: '' }];
+      refreshStructuredEditors();
+      syncActiveMissionDb();
+      renderResourceBank();
+      modalGrid.querySelector(`.structured-evidence-card[data-index="${activeModalMission.evidence.length - 1}"] .structured-evidence-field`)?.focus();
+    }
+    return;
+  }
+
+  const addButton = e.target.closest('.editor-add-action');
+  if (addButton && activeModalEditMode) {
+    e.preventDefault();
+    e.stopPropagation();
+    openBlockLibrary(addButton, addButton.closest('.section'));
+    return;
+  }
+
+  const styleButton = e.target.closest('.editor-style-action');
+  if (styleButton && activeModalEditMode) {
+    e.preventDefault();
+    e.stopPropagation();
+    const target = getCustomizableTarget(styleButton);
+    if (target) openBlockCustom(target);
+    return;
+  }
+
+  const deleteButton = e.target.closest('.editor-delete-action');
+  if (deleteButton && activeModalEditMode) {
+    e.preventDefault();
+    e.stopPropagation();
+    const target = deleteButton.closest('.custom-block') || deleteButton.closest('.custom-section');
+    if (!target) return;
+    target.remove();
+    saveModalBlocks();
+    return;
+  }
+
   if (activeDeleteMode) {
     const target = e.target.closest('#modal-grid .custom-block') || e.target.closest('#modal-grid .custom-section');
     if (!target) return;
@@ -2733,32 +3864,117 @@ modalGrid.addEventListener('click', e => {
   if (link && activeModalEditMode) e.preventDefault();
 });
 
-modalGrid.addEventListener('contextmenu', e => {
-  if (!requireAdmin()) return;
-  if (!activeModalEditMode) return;
-  if (activeDeleteMode) return;
-  const target = getCustomizableTarget(e.target);
-  if (!target) return;
+modalGrid.addEventListener('input', e => {
+  if (!requireAdmin() || !activeModalEditMode) return;
+  const briefEditor = e.target.closest('.brief-editor');
+  if (briefEditor) {
+    updateBriefContentFromEditor(briefEditor);
+    return;
+  }
+
+  const field = e.target.closest('.structured-person-field');
+  if (!field || !activeModalMission) return;
+  const card = field.closest('.structured-person-card');
+  const index = Number(card?.dataset.index);
+  if (!Number.isInteger(index)) return;
+
+  let collection = null;
+  if (card.classList.contains('structured-evidence-card')) {
+    collection = activeModalMission.evidence;
+    if (typeof collection?.[index] === 'string') collection[index] = { name: collection[index], desc: '', image: '' };
+  } else if (card.dataset.personType === 'civilian') {
+    collection = activeModalMission.civilians;
+  } else if (card.dataset.personType === 'suspect') {
+    collection = activeModalMission.suspects;
+  }
+  if (!collection?.[index]) return;
+  collection[index][field.dataset.field] = field.value;
+
+  if (field.dataset.field === 'image') {
+    updateStructuredCardImage(card, field.value.trim());
+  } else if (field.dataset.field === 'name') {
+    card.querySelector('.structured-person-name').textContent = field.value || getPersonPlaceholder(card.dataset.personType, 'name') || 'Preuve sans titre';
+  } else if (field.dataset.field === 'desc') {
+    card.querySelector('.structured-person-desc').textContent = field.value || getPersonPlaceholder(card.dataset.personType, 'desc') || 'Description manquante';
+  }
+  renderIntelPanel(activeModalMission, activeModalDlc);
+  syncActiveMissionDb();
+  renderResourceBank();
+});
+
+modalGrid.addEventListener('dragover', e => {
+  if (!requireAdmin() || !activeModalEditMode) return;
+  const imageDrop = e.target.closest('.structured-person-image');
+  if (!imageDrop) return;
   e.preventDefault();
-  openBlockCustom(target);
+  e.dataTransfer.dropEffect = 'copy';
+  imageDrop.classList.add('drag-over');
+});
+
+modalGrid.addEventListener('dragleave', e => {
+  const imageDrop = e.target.closest('.structured-person-image');
+  if (!imageDrop || imageDrop.contains(e.relatedTarget)) return;
+  imageDrop.classList.remove('drag-over');
+});
+
+modalGrid.addEventListener('drop', e => {
+  if (!requireAdmin() || !activeModalEditMode) return;
+  const imageDrop = e.target.closest('.structured-person-image');
+  if (!imageDrop) return;
+  e.preventDefault();
+  imageDrop.classList.remove('drag-over');
+  const imageUrl = getDroppedImageBankUrl(e.dataTransfer);
+  if (!imageUrl) return;
+  const card = imageDrop.closest('.structured-person-card');
+  updateStructuredCardImage(card, imageUrl);
+});
+
+modalGrid.addEventListener('pointerdown', e => {
+  if (!e.target.closest('.brief-editor')) return;
+  isBriefSelectionDragging = true;
+  hideBriefFormatToolbar();
+});
+
+modalGrid.addEventListener('mouseup', e => {
+  if (!e.target.closest('.brief-editor')) return;
+  isBriefSelectionDragging = false;
+  scheduleBriefFormatToolbar(0);
+});
+
+modalGrid.addEventListener('keyup', e => {
+  if (!e.target.closest('.brief-editor')) return;
+  scheduleBriefFormatToolbar(0);
+});
+
+function finishBriefSelectionDrag() {
+  if (!isBriefSelectionDragging) return;
+  isBriefSelectionDragging = false;
+  scheduleBriefFormatToolbar(0);
+}
+
+document.addEventListener('pointerup', finishBriefSelectionDrag);
+document.addEventListener('pointercancel', finishBriefSelectionDrag);
+
+document.addEventListener('selectionchange', () => {
+  if (!activeModalEditMode) return;
+  if (isBriefSelectionDragging) return;
+  if (briefFormatToolbar?.matches(':hover')) return;
+  scheduleBriefFormatToolbar(40);
+});
+
+modalGrid.addEventListener('contextmenu', e => {
+  if (activeModalEditMode) return;
 });
 
 blockLibrary.addEventListener('click', e => {
-  if (!requireAdmin()) return;
-  const option = e.target.closest('.block-option');
-  if (!option) return;
-  appendCustomBlock(activeBlockTarget, option.dataset.blockType);
   closeBlockLibrary();
 });
 
 editorBlockLibrary.addEventListener('click', e => {
-  if (!requireAdmin()) return;
-  const option = e.target.closest('.editor-block-option');
-  if (!option || !activeModalEditMode) return;
-  appendCustomBlock(modalGrid.querySelector('.section'), option.dataset.blockType);
+  if (e.target.closest('.editor-block-option')) e.preventDefault();
 });
 
-deleteModeToggle.addEventListener('click', () => {
+deleteModeToggle?.addEventListener('click', () => {
   if (!requireAdmin()) return;
   if (!activeModalEditMode) return;
   setDeleteMode(!activeDeleteMode);
@@ -2775,12 +3991,13 @@ modalGrid.addEventListener('pointerdown', e => {
   if (draggable.classList.contains('custom-block')) {
     moveCustomBlockToCanvas(draggable, rect, gridRect);
   }
+  const newRect = draggable.getBoundingClientRect();
   editingDrag = {
     element: draggable,
     isCustomBlock: draggable.classList.contains('custom-block'),
     pointerId: e.pointerId,
-    offsetX: e.clientX - rect.left,
-    offsetY: e.clientY - rect.top,
+    offsetX: e.clientX - newRect.left,
+    offsetY: e.clientY - newRect.top,
     gridLeft: gridRect.left,
     gridTop: gridRect.top
   };
@@ -2811,9 +4028,72 @@ modalGrid.addEventListener('pointerup', stopEditingDrag);
 modalGrid.addEventListener('pointercancel', stopEditingDrag);
 
 document.addEventListener('click', e => {
+  const clickedBriefEditor = e.target.closest?.('.brief-editor');
+  const clickedBriefColorUi = e.target.closest?.('#brief-color-toggle, #brief-color-popover');
+  if (isBriefColorPopoverOpen && !clickedBriefColorUi) {
+    closeBriefColorPopover();
+  }
+  if (briefFormatToolbar?.classList.contains('open') && !briefFormatToolbar.contains(e.target) && !clickedBriefEditor) {
+    hideBriefFormatToolbar();
+  }
+  if (imageContextMenu?.classList.contains('open') && !imageContextMenu.contains(e.target)) {
+    closeImageContextMenu();
+  }
   if (!blockLibrary.classList.contains('open')) return;
   if (blockLibrary.contains(e.target)) return;
   closeBlockLibrary();
+});
+
+imageContextMenu?.addEventListener('click', e => {
+  const action = e.target.closest('[data-image-action]')?.dataset.imageAction;
+  if (!action || !activeImageContextId) return;
+  const imageId = activeImageContextId;
+  closeImageContextMenu();
+  if (action === 'rename') renameImageBankItem(imageId);
+  if (action === 'delete') deleteImageBankItem(imageId);
+});
+
+imageNameDialog?.addEventListener('submit', e => {
+  e.preventDefault();
+  closeImageNameDialog(imageNameInput.value.trim());
+});
+
+imageNameCancel?.addEventListener('click', () => closeImageNameDialog(null));
+imageNameBg?.addEventListener('click', e => {
+  if (e.target === imageNameBg) closeImageNameDialog(null);
+});
+
+briefFormatToolbar?.addEventListener('mousedown', e => {
+  if (e.target.closest('#brief-color-popover')) return;
+  e.preventDefault();
+});
+
+briefFormatToolbar?.addEventListener('click', e => {
+  const command = e.target.closest('[data-brief-command]')?.dataset.briefCommand;
+  const block = e.target.closest('[data-brief-block]')?.dataset.briefBlock;
+  const linkButton = e.target.closest('[data-brief-link]');
+  const colorToggle = e.target.closest('#brief-color-toggle');
+  const colorPopover = e.target.closest('#brief-color-popover');
+  if (colorToggle) {
+    toggleBriefColorPopover();
+    return;
+  }
+  if (colorPopover) return;
+  if (linkButton) return;
+  if (command) applyBriefCommand(command);
+  if (block) applyBriefCommand('formatBlock', block);
+});
+
+briefFormatColor?.addEventListener('input', e => {
+  setSelectedBriefColor(e.target.value);
+});
+
+briefFormatColor?.addEventListener('change', e => {
+  applyBriefColor(e.target.value);
+});
+
+briefColorSave?.addEventListener('click', () => {
+  saveBriefSelectedColor();
 });
 
 filterBtn.addEventListener('click', openFilterPanel);
@@ -2856,6 +4136,68 @@ adminLoginForm.addEventListener('submit', async e => {
 });
 
 adminLogout.addEventListener('click', logoutAdmin);
+adminSyncLocal?.addEventListener('click', pushMissionDbMap);
+adminPushDb?.addEventListener('click', pushMissionDbMap);
+adminPushReport?.addEventListener('click', () => {
+  if (!adminPushReportPanel) return;
+  adminPushReportPanel.hidden = !adminPushReportPanel.hidden;
+  if (!adminPushReportPanel.hidden) renderPushReport();
+});
+
+imageBankUploadBtn?.addEventListener('click', () => {
+  imageBankUpload?.click();
+});
+
+imageBank?.addEventListener('click', e => {
+  if (e.target.closest('.image-bank-item')) return;
+  imageBankUpload?.click();
+});
+
+imageBank?.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  imageBankUpload?.click();
+});
+
+imageBankUpload?.addEventListener('change', async e => {
+  imageBankUpload.disabled = true;
+  try {
+    await importImageBankFiles(e.target.files || []);
+  } finally {
+    imageBankUpload.value = '';
+    imageBankUpload.disabled = false;
+  }
+});
+
+['dragenter', 'dragover'].forEach(eventName => {
+  imageBank?.addEventListener(eventName, e => {
+    e.preventDefault();
+    imageBank.classList.add('drag-over');
+  });
+});
+
+['dragleave', 'drop'].forEach(eventName => {
+  imageBank?.addEventListener(eventName, e => {
+    e.preventDefault();
+    if (eventName === 'drop') importImageBankFiles(e.dataTransfer?.files || []);
+    imageBank.classList.remove('drag-over');
+  });
+});
+
+resourceBankSearch?.addEventListener('input', e => {
+  activeResourceBankSearch = e.target.value;
+  renderResourceBank();
+});
+
+resourceBankFilters.forEach(button => {
+  button.addEventListener('click', () => {
+    activeResourceBankFilter = button.dataset.resourceFilter || 'all';
+    resourceBankFilters.forEach(item => {
+      item.classList.toggle('active', item === button);
+    });
+    renderResourceBank();
+  });
+});
 
 confirmCancel.addEventListener('click', () => closeConfirm(false));
 confirmOk.addEventListener('click', () => closeConfirm(true));
@@ -2958,6 +4300,9 @@ searchInput.addEventListener('input', e => {
 setAdminAuthenticated(false);
 refreshAdminSession();
 loadSavedTags();
+loadSavedMissionDb();
+renderImageBank();
+updatePendingPushUi();
 buildBoard();
 buildTimeline();
 buildPeopleBoard();

@@ -100,34 +100,31 @@
     <div id="editor-block-library" class="editor-block-library" aria-hidden="true" data-admin-only hidden>
       <div class="intel-header">
         <div class="intel-kicker">Mode édition</div>
-        <div class="intel-title">Bibliothèque de blocs</div>
+        <div class="intel-title">Banque de ressources</div>
       </div>
-      <div class="editor-block-list">
-        <button class="editor-block-option" type="button" data-block-type="text">
-          <span class="editor-block-name">Bloc texte</span>
-          <span class="editor-block-desc">Ajoute une note libre sur la grille.</span>
-        </button>
-        <button class="editor-block-option" type="button" data-block-type="image">
-          <span class="editor-block-name">Bloc image</span>
-          <span class="editor-block-desc">Ajoute une image depuis une URL.</span>
-        </button>
-        <button class="editor-block-option" type="button" data-block-type="link">
-          <span class="editor-block-name">Bloc lien</span>
-          <span class="editor-block-desc">Ajoute un raccourci cliquable.</span>
-        </button>
-        <button class="editor-block-option" type="button" data-block-type="column">
-          <span class="editor-block-name">Bloc colonne</span>
-          <span class="editor-block-desc">Ajoute une section avec titre et zone de contenu.</span>
-        </button>
-        <button class="editor-block-option" type="button" data-block-type="separator">
-          <span class="editor-block-name">Séparateur</span>
-          <span class="editor-block-desc">Ajoute une ligne pour structurer le dossier.</span>
-        </button>
-      </div>
-      <button id="delete-mode-toggle" class="delete-mode-toggle" type="button" aria-pressed="false">
-        <span class="editor-block-name">Mode suppression</span>
-        <span class="editor-block-desc">Clique sur un bloc custom pour le retirer.</span>
-      </button>
+      <section class="editor-bank-section image-bank-section" aria-labelledby="image-bank-title">
+        <div class="editor-bank-head">
+          <div id="image-bank-title" class="editor-bank-title">Banque d'images</div>
+          <button id="image-bank-upload-btn" class="image-upload-btn" type="button">Importer</button>
+          <input id="image-bank-upload" class="image-bank-upload-input" type="file" accept="image/webp,.webp" multiple>
+        </div>
+        <div id="image-bank" class="image-bank" role="button" tabindex="0" aria-label="Importer des images WebP par clic ou glisser déposer"></div>
+      </section>
+      <section class="editor-bank-section block-bank-section" aria-labelledby="block-bank-title">
+        <div class="editor-bank-head">
+          <div id="block-bank-title" class="editor-bank-title">Banque de blocs</div>
+        </div>
+        <div class="resource-bank-tools">
+          <input id="resource-bank-search" class="resource-bank-search" type="search" placeholder="Rechercher..." autocomplete="off">
+          <div class="resource-bank-filters" aria-label="Filtrer la banque de ressources">
+            <button class="resource-bank-filter active" type="button" data-resource-filter="all">Tout</button>
+            <button class="resource-bank-filter" type="button" data-resource-filter="civilian">Civils</button>
+            <button class="resource-bank-filter" type="button" data-resource-filter="suspect">Suspects</button>
+            <button class="resource-bank-filter" type="button" data-resource-filter="evidence">Preuves</button>
+          </div>
+        </div>
+        <div id="resource-bank" class="resource-bank"></div>
+      </section>
     </div>
   </aside>
 </div>
@@ -138,6 +135,46 @@
   <button class="block-option" type="button" data-block-type="link">Bloc lien</button>
   <button class="block-option" type="button" data-block-type="column">Bloc colonne</button>
   <button class="block-option" type="button" data-block-type="separator">Séparateur</button>
+</div>
+
+<div id="image-context-menu" class="image-context-menu" aria-hidden="true" data-admin-only hidden>
+  <button type="button" data-image-action="rename">Renommer</button>
+  <button type="button" data-image-action="delete">Supprimer</button>
+</div>
+
+<div id="image-name-bg" class="image-name-bg" aria-hidden="true" data-admin-only hidden>
+  <form id="image-name-dialog" class="image-name-dialog" role="dialog" aria-modal="true" aria-labelledby="image-name-title">
+    <div id="image-name-title" class="confirm-head">Nommer l'image</div>
+    <div class="edit-body">
+      <label class="edit-label" for="image-name-input">Nom dans la banque</label>
+      <input id="image-name-input" class="edit-input" type="text" autocomplete="off">
+    </div>
+    <div class="confirm-actions">
+      <button id="image-name-cancel" class="control-btn" type="button">Annuler</button>
+      <button id="image-name-ok" class="control-btn danger" type="submit">Valider</button>
+    </div>
+  </form>
+</div>
+
+<div id="brief-format-toolbar" class="brief-format-toolbar" aria-hidden="true" data-admin-only hidden>
+  <button type="button" data-brief-command="bold" title="Gras">B</button>
+  <button type="button" data-brief-command="italic" title="Italique">I</button>
+  <button type="button" data-brief-command="underline" title="Souligné">U</button>
+  <button type="button" data-brief-block="h1" title="Titre 1">H1</button>
+  <button type="button" data-brief-block="h2" title="Titre 2">H2</button>
+  <button type="button" data-brief-block="h3" title="Titre 3">H3</button>
+  <button id="brief-link-button" type="button" data-brief-link title="Lien">Lien</button>
+  <button id="brief-color-toggle" class="brief-color-toggle" type="button" aria-label="Couleur du texte" aria-expanded="false">
+    <span id="brief-color-preview" class="brief-color-preview"></span>
+  </button>
+  <div id="brief-color-popover" class="brief-color-popover" aria-hidden="true">
+    <div class="brief-color-picker-row">
+      <input id="brief-format-color" type="color" value="#e8e8e8" aria-label="Couleur personnalisée">
+      <button id="brief-color-save" type="button" title="Enregistrer cette couleur">+</button>
+    </div>
+    <div id="brief-custom-colors" class="brief-custom-colors" aria-label="Couleurs personnalisées"></div>
+    <div id="brief-format-colors" class="brief-format-colors" aria-label="Couleurs prédéfinies"></div>
+  </div>
 </div>
 
 <!-- FILTERS -->
@@ -259,6 +296,19 @@
             <h3>Session admin</h3>
             <p>Mode administrateur actif. Les contrôles de modification du contenu permanent sont disponibles.</p>
             <div class="admin-session-actions">
+              <div class="admin-sync-panel">
+                <div class="admin-sync-title">Synchro / Push</div>
+                <div class="admin-sync-actions">
+                  <button id="admin-sync-local" class="control-btn" type="button">Sync backend</button>
+                  <button id="admin-push-db" class="control-btn danger" type="button">Push GitHub</button>
+                </div>
+                <div class="admin-push-status">
+                  <span id="admin-pending-push">Aucune modification en attente</span>
+                  <button id="admin-push-report" class="admin-report-btn" type="button">Rapport</button>
+                </div>
+                <div id="admin-push-report-panel" class="admin-push-report" hidden></div>
+                <div id="admin-sync-message" class="admin-login-message" role="status" aria-live="polite"></div>
+              </div>
               <button id="admin-logout" class="control-btn" type="button">Déconnexion</button>
             </div>
           </div>

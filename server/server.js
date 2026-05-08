@@ -14,7 +14,9 @@ const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 const SAFE_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const DEFAULT_FRONTEND_ORIGINS = [
   "https://ron-lore.online",
-  "https://admin.ron-lore.online"
+  "https://admin.ron-lore.online",
+  "http://localhost:5500",
+  "http://127.0.0.1:5500"
 ];
 
 const app = express();
