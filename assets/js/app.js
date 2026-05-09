@@ -536,6 +536,7 @@ function makeTextElement(tagName, className, text) {
 }
 
 function getSteamStatusLabel(status) {
+  if (status === null || status === undefined) return 'Statut Steam indisponible';
   return {
     0: 'Hors ligne',
     1: 'En ligne',
@@ -544,7 +545,29 @@ function getSteamStatusLabel(status) {
     4: 'Sommeil',
     5: 'Recherche échange',
     6: 'Recherche partie'
-  }[status] || 'Steam';
+  }[status] || 'Statut Steam';
+}
+
+function getSteamStatusClass(status) {
+  return {
+    0: 'offline',
+    1: 'online',
+    2: 'busy',
+    3: 'away',
+    4: 'away',
+    5: 'looking',
+    6: 'looking'
+  }[status] || 'unknown';
+}
+
+function getCreatorPresenceLabel(creator) {
+  if (creator.game) return `Joue à : ${creator.game}`;
+  return getSteamStatusLabel(creator.status);
+}
+
+function getCreatorPresenceClass(creator) {
+  if (creator.game) return 'playing';
+  return getSteamStatusClass(creator.status);
 }
 
 function renderCreatorFallback(message) {
@@ -577,7 +600,7 @@ function renderSteamCreators(creators) {
 
     const name = makeTextElement('h3', 'creator-name', creator.name || 'Créateur');
     const role = makeTextElement('div', 'creator-role', creator.role || 'Créateur');
-    const status = makeTextElement('div', 'creator-status', getSteamStatusLabel(creator.status));
+    const status = makeTextElement('div', `creator-status ${getCreatorPresenceClass(creator)}`, getCreatorPresenceLabel(creator));
 
     body.append(name, role, status);
     if (creator.note) body.appendChild(makeTextElement('p', 'creator-note', creator.note));

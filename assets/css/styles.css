@@ -662,7 +662,10 @@
     background: rgba(0,0,0,0.84);
     backdrop-filter: blur(4px);
   }
-  #settings-bg.open { display: block; }
+  #settings-bg.open {
+    display: flex;
+    align-items: stretch;
+  }
   #confirm-bg {
     display: none;
     position: fixed;
@@ -929,6 +932,7 @@
   #settings-panel {
     width: min(1220px, calc(100vw - 48px));
     min-height: min(760px, calc(100vh - 48px));
+    height: calc(100vh - 48px);
     margin: 24px auto;
     background: var(--bg);
     border: 1px solid var(--border2);
@@ -936,6 +940,8 @@
     border-radius: 8px;
     overflow: hidden;
     animation: slideUp 0.25s ease;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
   }
   .filter-head {
     display: flex;
@@ -1044,6 +1050,7 @@
   .settings-layout {
     display: grid;
     grid-template-columns: 190px 1fr;
+    height: 100%;
     min-height: 620px;
   }
   .settings-nav {
@@ -1076,6 +1083,8 @@
     color: var(--red2);
   }
   .settings-content {
+    min-height: 0;
+    overflow: auto;
     padding: 22px 24px 28px;
   }
   .settings-page { display: none; }
@@ -1128,7 +1137,9 @@
   .creator-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    align-content: start;
     gap: 12px;
+    min-height: calc(100% - 32px);
   }
   .creator-card {
     display: grid;
@@ -1173,7 +1184,22 @@
   }
   .creator-status {
     margin-top: 5px;
+    color: var(--text3);
+  }
+  .creator-status.online,
+  .creator-status.playing {
     color: #2ecc71;
+  }
+  .creator-status.away,
+  .creator-status.looking {
+    color: #f1c40f;
+  }
+  .creator-status.busy {
+    color: var(--red2);
+  }
+  .creator-status.offline,
+  .creator-status.unknown {
+    color: #8f95a3;
   }
   .creator-note {
     margin-top: 7px;
@@ -3039,6 +3065,7 @@
     #settings-panel {
       width: 100vw;
       min-height: 100vh;
+      height: 100vh;
       margin: 0;
       border-left: none;
       border-right: none;
@@ -3046,7 +3073,10 @@
     }
     .filter-head,
     .filter-body { padding: 18px; }
-    .settings-layout { grid-template-columns: 1fr; }
+    .settings-layout {
+      grid-template-columns: 1fr;
+      min-height: 0;
+    }
     .settings-nav { border-right: none; border-bottom: 1px solid var(--border); }
     .settings-content { padding: 18px; }
     .filter-toolbar {

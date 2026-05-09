@@ -142,21 +142,53 @@ function getSteamCreatorsConfig() {
       }
 
       const steamId = creator.steamId ? String(creator.steamId) : "";
+      const vanityUrl = creator.vanityUrl ? String(creator.vanityUrl) : "";
       const fallbackName = creator.name ? String(creator.name) : "";
       const profileUrl = creator.profileUrl ? String(creator.profileUrl) : "";
 
-      if (!steamId && !profileUrl) {
-        throw new Error(`Steam creator at index ${index} needs steamId or profileUrl`);
+      if (!steamId && !vanityUrl && !profileUrl) {
+        throw new Error(`Steam creator at index ${index} needs steamId, vanityUrl, or profileUrl`);
       }
 
       return {
         steamId,
+        vanityUrl: vanityUrl || getSteamVanityFromProfileUrl(profileUrl),
         fallbackName,
         role: creator.role ? String(creator.role) : "Createur",
         profileUrl,
         note: creator.note ? String(creator.note) : ""
       };
     });
+}
+
+function getSteamVanityFromProfileUrl(profileUrl) {
+  const match = String(profileUrl || "").match(/steamcommunity\.com\/id\/([^/?#]+)/i);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
+async function resolveSteamVanityUrl(vanityUrl) {
+  const apiKey = process.env.STEAM_API_KEY;
+  if (!apiKey || !vanityUrl) return "";
+
+  const url = new URL("https://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/");
+  url.searchParams.set("key", apiKey);
+  url.searchParams.set("vanityurl", vanityUrl);
+
+  const response = await fetch(url);
+  if (!response.ok) return "";
+
+  const body = await response.json();
+  return body.response?.success === 1 ? String(body.response.steamid || "") : "";
+}
+
+async function resolveSteamCreatorIds(creators) {
+  return Promise.all(creators.map(async creator => {
+    if (creator.steamId || !creator.vanityUrl) return creator;
+    return {
+      ...creator,
+      steamId: await resolveSteamVanityUrl(creator.vanityUrl)
+    };
+  }));
 }
 
 async function fetchSteamPlayerSummaries(creators) {
@@ -187,7 +219,7 @@ async function getSteamCreators() {
     return steamCreatorCache.data;
   }
 
-  const creators = getSteamCreatorsConfig();
+  const creators = await resolveSteamCreatorIds(getSteamCreatorsConfig());
   const summaries = await fetchSteamPlayerSummaries(creators);
   const data = creators.map(creator => {
     const steamProfile = summaries.get(creator.steamId) || {};
@@ -203,6 +235,8 @@ async function getSteamCreators() {
       profileUrl,
       avatar: steamProfile.avatarfull || steamProfile.avatarmedium || "",
       status: Number.isInteger(steamProfile.personastate) ? steamProfile.personastate : null,
+      game: steamProfile.gameextrainfo || "",
+      gameId: steamProfile.gameid || "",
       lastLogoff: steamProfile.lastlogoff ? new Date(steamProfile.lastlogoff * 1000).toISOString() : null
     };
   });
