@@ -1125,6 +1125,88 @@
     font-size: 14px;
     line-height: 1.55;
   }
+  .creator-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+  }
+  .creator-card {
+    display: grid;
+    grid-template-columns: 74px minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    padding: 12px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .creator-avatar {
+    width: 74px;
+    height: 74px;
+    object-fit: cover;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 4px;
+  }
+  .creator-body {
+    min-width: 0;
+  }
+  .creator-name {
+    overflow: hidden;
+    color: var(--text);
+    font-family: var(--cond);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.7px;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .creator-role,
+  .creator-status,
+  .creator-empty {
+    color: var(--text3);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+  }
+  .creator-status {
+    margin-top: 5px;
+    color: #2ecc71;
+  }
+  .creator-note {
+    margin-top: 7px;
+    color: var(--text2);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .creator-link {
+    grid-column: 1 / -1;
+    width: fit-content;
+    padding: 7px 10px;
+    background: rgba(231,76,60,0.1);
+    border: 1px solid rgba(231,76,60,0.35);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.8px;
+    text-decoration: none;
+    text-transform: uppercase;
+  }
+  .creator-link:hover,
+  .creator-link:focus-visible {
+    background: rgba(231,76,60,0.18);
+    border-color: rgba(231,76,60,0.7);
+    outline: none;
+  }
+  .creator-empty {
+    padding: 13px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
   .admin-login-form {
     display: grid;
     gap: 10px;
@@ -1174,6 +1256,28 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+  }
+  .admin-sync-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: fit-content;
+    color: var(--text2);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .admin-sync-toggle input {
+    accent-color: var(--red);
+  }
+  .admin-sync-state {
+    color: var(--text3);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
   }
   .admin-last-commit {
     width: fit-content;

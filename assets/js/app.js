@@ -157,6 +157,7 @@ const settingsClose = document.getElementById('settings-close');
 const settingsSummary = document.getElementById('settings-summary');
 const tagSummaryList = document.getElementById('tag-summary-list');
 const settingsTabs = document.querySelectorAll('.settings-tab[data-settings-page]');
+const creatorGrid = document.getElementById('creator-grid');
 const adminSessionSummary = document.getElementById('admin-session-summary');
 const adminLoginForm = document.getElementById('admin-login-form');
 const adminPassword = document.getElementById('admin-password');
@@ -165,6 +166,8 @@ const adminLoginMessage = document.getElementById('admin-login-message');
 const adminSessionPanel = document.getElementById('admin-session-panel');
 const adminSyncLocal = document.getElementById('admin-sync-local');
 const adminPushDb = document.getElementById('admin-push-db');
+const adminAutoSync = document.getElementById('admin-auto-sync');
+const adminSyncState = document.getElementById('admin-sync-state');
 const adminSyncMessage = document.getElementById('admin-sync-message');
 const adminPendingPush = document.getElementById('admin-pending-push');
 const adminPushReport = document.getElementById('admin-push-report');
@@ -215,6 +218,7 @@ const MISSION_DB_INDEX_STORAGE_KEY = 'ron-lore-mission-db-index-v1';
 const MISSION_DB_PUSHED_STORAGE_KEY = 'ron-lore-mission-db-pushed-v1';
 const MISSION_NOTES_STORAGE_KEY = 'ron-lore-mission-notes-v1';
 const IMAGE_BANK_STORAGE_KEY = 'ron-lore-image-bank-v1';
+const AUTO_SYNC_STORAGE_KEY = 'ron-lore-auto-sync-v1';
 const API_BASE_URL = (
   window.RON_LORE_API_BASE ||
   document.querySelector('meta[name="ron-lore-api-base"]')?.content ||
@@ -232,6 +236,7 @@ const TIMELINE_CARD_WIDTH = 210;
 const TIMELINE_MIN_WIDTH = 1600;
 const TIMELINE_MAX_ROWS = 3;
 const TIMELINE_EXPANDED_VISIBLE_ROWS = 6;
+const AUTO_SYNC_INTERVAL_MS = 15000;
 const TIMELINE_STACK_GAP = 34;
 const TIMELINE_ROW_HEIGHT = 58;
 const TIMELINE_TOP_OFFSET = 66;
@@ -289,6 +294,14 @@ let isBriefSelectionDragging = false;
 let briefSelectionTimer = null;
 let selectedBriefColor = BRIEF_TEXT_COLOR_OPTIONS[0];
 let isBriefColorPopoverOpen = false;
+let sharedMissionDbMap = {};
+let sharedModalLayoutMap = {};
+let sharedModalBlocksMap = {};
+let currentEditorName = '';
+let autoSyncTimer = null;
+let isSyncingFromBackend = false;
+let presenceTimer = null;
+let lastPresenceText = '';
 
 function getApiUrl(path) {
   return `${API_BASE_URL}${path}`;
@@ -366,7 +379,7 @@ async function refreshLatestCommitPill() {
 function updateAdminLoginUi() {
   if (adminSessionSummary) {
     if (isAdminAuthenticated) {
-      adminSessionSummary.textContent = 'Mode administrateur actif';
+      adminSessionSummary.textContent = `Mode administrateur actif${currentEditorName ? ` : ${currentEditorName}` : ''}`;
     } else if (!hasConfiguredApiBase()) {
       adminSessionSummary.textContent = 'Web Service Render non configuré';
     } else {
@@ -376,8 +389,10 @@ function updateAdminLoginUi() {
   if (adminLoginForm) adminLoginForm.hidden = isAdminAuthenticated;
   if (adminSessionPanel) adminSessionPanel.hidden = !isAdminAuthenticated;
   if (adminPassword && isAdminAuthenticated) adminPassword.value = '';
+  if (adminAutoSync) adminAutoSync.checked = isAutoSyncEnabled();
   setAdminSyncLoading(false);
   updatePendingPushUi();
+  updateAutoSyncStateLabel();
   refreshLatestCommitPill();
   if (!isAdminAuthenticated && !hasConfiguredApiBase()) {
     setAdminLoginMessage('Renseigne l’URL publique du Web Service Render dans la meta ron-lore-api-base.', 'error');
@@ -387,6 +402,7 @@ function updateAdminLoginUi() {
 function setAdminAuthenticated(authenticated) {
   const wasAdminAuthenticated = isAdminAuthenticated;
   isAdminAuthenticated = Boolean(authenticated);
+  if (!isAdminAuthenticated) currentEditorName = '';
   document.body.classList.toggle('admin-authenticated', isAdminAuthenticated);
   updateAdminLoginUi();
 
@@ -401,10 +417,16 @@ function setAdminAuthenticated(authenticated) {
     buildTimeline();
     buildPeopleBoard();
     refreshRenderedTagColors();
+    startAutoSync();
+    startPresenceLoop();
   }
 
   if (!isAdminAuthenticated && wasAdminAuthenticated) {
+    stopAutoSync();
+    stopPresenceLoop();
+    lastPresenceText = '';
     resetMissionTagsToBase();
+    applySharedMissionDb();
     refreshBoardFromSearch();
     buildTimeline();
     buildPeopleBoard();
@@ -452,6 +474,7 @@ async function refreshAdminSession() {
     });
     if (!response.ok) throw new Error('Admin session unavailable');
     const session = await response.json();
+    currentEditorName = session.editor?.name || '';
     setAdminAuthenticated(session.authenticated === true);
   } catch {
     setAdminAuthenticated(false);
@@ -484,6 +507,7 @@ async function loginAdmin(password) {
   }
 
   const session = await response.json();
+  currentEditorName = session.editor?.name || '';
   setAdminAuthenticated(session.authenticated === true);
 }
 
@@ -509,6 +533,87 @@ function makeTextElement(tagName, className, text) {
   if (className) element.className = className;
   element.textContent = text;
   return element;
+}
+
+function getSteamStatusLabel(status) {
+  return {
+    0: 'Hors ligne',
+    1: 'En ligne',
+    2: 'Occupé',
+    3: 'Absent',
+    4: 'Sommeil',
+    5: 'Recherche échange',
+    6: 'Recherche partie'
+  }[status] || 'Steam';
+}
+
+function renderCreatorFallback(message) {
+  if (!creatorGrid) return;
+  clearElement(creatorGrid);
+  creatorGrid.appendChild(makeTextElement('div', 'creator-empty', message));
+}
+
+function renderSteamCreators(creators) {
+  if (!creatorGrid) return;
+  clearElement(creatorGrid);
+
+  if (!creators.length) {
+    renderCreatorFallback('Aucun créateur configuré.');
+    return;
+  }
+
+  creators.forEach(creator => {
+    const card = document.createElement('article');
+    card.className = 'creator-card';
+
+    const avatar = document.createElement('img');
+    avatar.className = 'creator-avatar';
+    avatar.src = creator.avatar || 'assets/ready_or_not_lore_logo.webp';
+    avatar.alt = creator.name || 'Créateur Steam';
+    avatar.loading = 'lazy';
+
+    const body = document.createElement('div');
+    body.className = 'creator-body';
+
+    const name = makeTextElement('h3', 'creator-name', creator.name || 'Créateur');
+    const role = makeTextElement('div', 'creator-role', creator.role || 'Créateur');
+    const status = makeTextElement('div', 'creator-status', getSteamStatusLabel(creator.status));
+
+    body.append(name, role, status);
+    if (creator.note) body.appendChild(makeTextElement('p', 'creator-note', creator.note));
+
+    const link = document.createElement('a');
+    link.className = 'creator-link';
+    link.href = creator.profileUrl || '#';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = 'Profil Steam';
+
+    card.append(avatar, body, link);
+    creatorGrid.appendChild(card);
+  });
+}
+
+async function loadSteamCreators() {
+  if (!creatorGrid) return;
+  if (!hasConfiguredApiBase()) {
+    renderCreatorFallback('Backend non configuré pour charger les profils Steam.');
+    return;
+  }
+
+  renderCreatorFallback('Chargement des profils Steam...');
+
+  try {
+    const response = await fetch(getApiUrl('/creators/steam'), {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store'
+    });
+    if (!response.ok) throw new Error('Steam creators unavailable');
+    const body = await response.json();
+    renderSteamCreators(body.creators || []);
+  } catch {
+    renderCreatorFallback('Profils Steam indisponibles pour le moment.');
+  }
 }
 
 function trapFocus(event, container) {
@@ -685,6 +790,156 @@ function loadSavedTags() {
   });
 }
 
+function applyMissionDbMapToData(dbMap) {
+  Object.values(dbMap || {}).forEach(saved => {
+    const localId = saved.localId || saved.id;
+    const entry = getAllMissionEntries().find(({ dlc, mission }) => {
+      return getMissionKey(dlc, mission) === localId || normalizeTagValue(mission.name) === saved.missionId;
+    });
+    if (!entry) return;
+
+    const { mission } = entry;
+    if (Array.isArray(saved.tags)) mission.tags = [...saved.tags];
+    if (typeof saved.summary === 'string') mission.brief = saved.summary;
+    if (typeof saved.summaryHtml === 'string') mission.briefHtml = saved.summaryHtml;
+    if (saved.people?.civilians) mission.civilians = [...saved.people.civilians];
+    if (saved.people?.suspects) mission.suspects = [...saved.people.suspects];
+    if (Array.isArray(saved.evidence)) mission.evidence = [...saved.evidence];
+  });
+}
+
+function getMissionDbStorageKey(missionDb) {
+  return missionDb.localId || missionDb.id || '';
+}
+
+function createLayoutFromMissionVisual(missionDb) {
+  return (missionDb.visual?.sections || [])
+    .filter(section => section?.id)
+    .map(section => ({
+      id: section.id,
+      left: section.style?.left || '',
+      top: section.style?.top || '',
+      width: section.style?.width || '',
+      minHeight: section.style?.minHeight || ''
+    }));
+}
+
+function createBlocksFromMissionVisual(missionDb) {
+  const sections = missionDb.visual?.sections || [];
+  const sectionOverrides = sections
+    .filter(section => section?.id && section.kind !== 'custom')
+    .map(section => ({
+      id: section.id,
+      title: section.title || '',
+      custom: section.custom || {}
+    }));
+  const customSections = sections
+    .filter(section => section?.id && section.kind === 'custom')
+    .map(section => ({
+      id: section.id,
+      title: section.title || 'NOUVELLE COLONNE',
+      style: section.style || {},
+      custom: section.custom || {}
+    }));
+
+  return {
+    sectionOverrides,
+    customSections,
+    blocks: missionDb.visual?.blocks || []
+  };
+}
+
+function applySharedMissionDb() {
+  applyMissionDbMapToData(sharedMissionDbMap);
+}
+
+function saveMissionDbIndex(dbMap) {
+  localStorage.setItem(MISSION_DB_INDEX_STORAGE_KEY, JSON.stringify({
+    updatedAt: new Date().toISOString(),
+    missions: Object.values(dbMap)
+  }));
+}
+
+function mergeSharedMissionDbIntoLocalStorage(missions, options = {}) {
+  const dbMap = getMissionDbMap();
+  const pushedMap = getMissionDbPushedMap();
+  const skipped = [];
+  let changed = 0;
+
+  missions.forEach(missionDb => {
+    const key = getMissionDbStorageKey(missionDb);
+    if (!key) return;
+
+    const local = dbMap[key];
+    const localIsPending = local && pushedMap[key] !== local.updatedAt;
+    const isActiveEditingMission = activeModalEditMode && activeModalMissionKey === key;
+
+    if (!options.force && (localIsPending || isActiveEditingMission)) {
+      skipped.push(missionDb.title || key);
+      return;
+    }
+
+    if (JSON.stringify(local || null) === JSON.stringify(missionDb || null)) {
+      pushedMap[key] = missionDb.updatedAt || '';
+      return;
+    }
+
+    dbMap[key] = missionDb;
+    pushedMap[key] = missionDb.updatedAt || '';
+    changed += 1;
+  });
+
+  saveMissionDbMap(dbMap);
+  saveMissionDbPushedMap(pushedMap);
+  saveMissionDbIndex(dbMap);
+  updatePendingPushUi();
+
+  return { changed, skipped };
+}
+
+async function loadSharedMissionDbFromApi(options = {}) {
+  if (!hasConfiguredApiBase()) return { changed: 0, skipped: [] };
+
+  try {
+    const response = await fetch(getApiUrl('/data/missions'), {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store'
+    });
+    if (!response.ok) throw new Error('Shared mission DB unavailable');
+
+    const body = await response.json();
+    const missionDbMap = {};
+    const layoutMap = {};
+    const blocksMap = {};
+
+    (body.missions || []).forEach(missionDb => {
+      const key = getMissionDbStorageKey(missionDb);
+      if (!key) return;
+      missionDbMap[key] = missionDb;
+
+      const layout = createLayoutFromMissionVisual(missionDb);
+      if (layout.length > 0) layoutMap[key] = layout;
+
+      const blocks = createBlocksFromMissionVisual(missionDb);
+      if (blocks.sectionOverrides.length > 0 || blocks.customSections.length > 0 || blocks.blocks.length > 0) {
+        blocksMap[key] = blocks;
+      }
+    });
+
+    sharedMissionDbMap = missionDbMap;
+    sharedModalLayoutMap = layoutMap;
+    sharedModalBlocksMap = blocksMap;
+    applySharedMissionDb();
+    if (options.updateLocalStorage) {
+      return mergeSharedMissionDbIntoLocalStorage(Object.values(missionDbMap), options);
+    }
+    return { changed: Object.keys(missionDbMap).length, skipped: [] };
+  } catch {
+    // The static data remains usable if the shared backend is asleep or not deployed yet.
+    return { changed: 0, skipped: [] };
+  }
+}
+
 function resetMissionTagsToBase() {
   DATA.forEach(dlc => {
     dlc.missions.forEach(mission => {
@@ -733,20 +988,9 @@ function getMissionDbMap() {
 }
 
 function loadSavedMissionDb() {
+  if (!requireAdmin()) return;
   const dbMap = getMissionDbMap();
-  DATA.forEach(dlc => {
-    dlc.missions.forEach(mission => {
-      const saved = dbMap[getMissionKey(dlc, mission)];
-      if (!saved) return;
-
-      if (Array.isArray(saved.tags)) mission.tags = [...saved.tags];
-      if (typeof saved.summary === 'string') mission.brief = saved.summary;
-      if (typeof saved.summaryHtml === 'string') mission.briefHtml = saved.summaryHtml;
-      if (saved.people?.civilians) mission.civilians = [...saved.people.civilians];
-      if (saved.people?.suspects) mission.suspects = [...saved.people.suspects];
-      if (Array.isArray(saved.evidence)) mission.evidence = [...saved.evidence];
-    });
-  });
+  applyMissionDbMapToData(dbMap);
 }
 
 function saveMissionDbMap(dbMap) {
@@ -928,6 +1172,7 @@ function buildActiveMissionDb() {
       hypotheses: [],
       questions: []
     },
+    updatedBy: currentEditorName || 'Admin',
     updatedAt: new Date().toISOString()
   };
 }
@@ -964,6 +1209,7 @@ async function pushMissionDb(missionDb) {
     ...missionDb,
     id,
     localId: missionDb.id,
+    updatedBy: currentEditorName || missionDb.updatedBy || 'Admin',
     pushedAt: new Date().toISOString()
   };
   const response = await fetch(getApiUrl(`/data/missions/${encodeURIComponent(id)}`), {
@@ -991,9 +1237,9 @@ async function pushMissionDbMap() {
   }
 
   if (activeModalMission && activeModalDlc) syncCurrentMissionDbFromUi();
-  const missions = Object.values(getMissionDbMap());
+  const missions = getPendingMissionDbs();
   if (missions.length === 0) {
-    setAdminSyncMessage('Aucune fiche locale a pousser.', 'error');
+    setAdminSyncMessage('Aucune fiche locale a pousser.', 'success');
     return;
   }
 
@@ -1014,11 +1260,165 @@ async function pushMissionDbMap() {
 }
 
 function getSavedModalLayouts() {
+  if (!requireAdmin()) return sharedModalLayoutMap;
   try {
-    return JSON.parse(localStorage.getItem(MODAL_LAYOUT_STORAGE_KEY)) || {};
+    return {
+      ...sharedModalLayoutMap,
+      ...(JSON.parse(localStorage.getItem(MODAL_LAYOUT_STORAGE_KEY)) || {})
+    };
   } catch {
-    return {};
+    return sharedModalLayoutMap;
   }
+}
+
+function isAutoSyncEnabled() {
+  return localStorage.getItem(AUTO_SYNC_STORAGE_KEY) === 'true';
+}
+
+function updateAutoSyncStateLabel(message = '') {
+  if (!adminSyncState) return;
+  if (!isAdminAuthenticated) {
+    adminSyncState.textContent = 'Synchro auto inactive';
+    return;
+  }
+
+  adminSyncState.textContent = message || (
+    isAutoSyncEnabled()
+      ? `Synchro auto active toutes les ${AUTO_SYNC_INTERVAL_MS / 1000}s`
+      : 'Synchro auto inactive'
+  );
+  if (lastPresenceText) {
+    adminSyncState.textContent = `${adminSyncState.textContent} | ${lastPresenceText}`;
+  }
+}
+
+function formatPresence(editors) {
+  const others = (editors || []).filter(editor => editor.name !== currentEditorName);
+  if (others.length === 0) return '';
+  const editor = others[0];
+  return `${editor.name} modifie : ${editor.title || editor.missionId}`;
+}
+
+async function refreshPresence() {
+  if (!hasConfiguredApiBase()) return;
+
+  try {
+    const response = await fetch(getApiUrl('/presence'), {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store'
+    });
+    if (!response.ok) throw new Error('Presence unavailable');
+    const body = await response.json();
+    lastPresenceText = formatPresence(body.editors);
+    updateAutoSyncStateLabel();
+  } catch {
+    lastPresenceText = '';
+    updateAutoSyncStateLabel();
+  }
+}
+
+async function sendPresence() {
+  if (!requireAdmin() || !activeModalEditMode || !activeModalMissionKey || !hasConfiguredApiBase()) return;
+
+  try {
+    await fetch(getApiUrl('/presence'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        missionId: activeModalMissionKey,
+        title: activeModalMission?.name || activeModalMissionKey,
+        action: 'editing'
+      })
+    });
+  } catch {
+    // Presence is only informative; editing must keep working if it fails.
+  }
+}
+
+function stopPresenceLoop() {
+  if (!presenceTimer) return;
+  clearInterval(presenceTimer);
+  presenceTimer = null;
+}
+
+function startPresenceLoop() {
+  stopPresenceLoop();
+  if (!isAdminAuthenticated) return;
+  sendPresence();
+  refreshPresence();
+  presenceTimer = setInterval(() => {
+    sendPresence();
+    refreshPresence();
+  }, 10000);
+}
+
+async function syncLocalStorageFromBackend(options = {}) {
+  if (!requireAdmin() || isSyncingFromBackend) return;
+  if (!hasConfiguredApiBase()) {
+    setAdminSyncMessage('Web Service Render non configure.', 'error');
+    return;
+  }
+
+  isSyncingFromBackend = true;
+  if (!options.silent) setAdminSyncMessage('Synchro backend en cours...');
+
+  try {
+    const result = await loadSharedMissionDbFromApi({ updateLocalStorage: true });
+    resetMissionTagsToBase();
+    applySharedMissionDb();
+    loadSavedTags();
+    loadSavedMissionDb();
+    refreshBoardFromSearch();
+    buildTimeline();
+    buildPeopleBoard();
+    refreshRenderedTagColors();
+    if (activeModalMission && activeModalDlc && !activeModalEditMode) {
+      openModal(activeModalMission, activeModalDlc);
+    }
+
+    const skippedText = result.skipped.length
+      ? ` ${result.skipped.length} fiche(s) locale(s) protegee(s).`
+      : '';
+    const message = `${result.changed} fiche(s) synchronisee(s).${skippedText}`;
+    setAdminSyncMessage(message, 'success');
+    updateAutoSyncStateLabel(`Derniere synchro : ${new Date().toLocaleTimeString()}`);
+  } catch (error) {
+    setAdminSyncMessage(error.message || 'Synchro backend impossible.', 'error');
+  } finally {
+    isSyncingFromBackend = false;
+  }
+}
+
+function stopAutoSync() {
+  if (!autoSyncTimer) return;
+  clearInterval(autoSyncTimer);
+  autoSyncTimer = null;
+}
+
+function startAutoSync() {
+  stopAutoSync();
+  if (!isAdminAuthenticated || !isAutoSyncEnabled()) {
+    updateAutoSyncStateLabel();
+    return;
+  }
+
+  autoSyncTimer = setInterval(() => {
+    syncLocalStorageFromBackend({ silent: true });
+  }, AUTO_SYNC_INTERVAL_MS);
+  updateAutoSyncStateLabel();
+}
+
+function setAutoSyncEnabled(enabled) {
+  localStorage.setItem(AUTO_SYNC_STORAGE_KEY, enabled ? 'true' : 'false');
+  if (adminAutoSync) adminAutoSync.checked = enabled;
+  if (enabled) {
+    syncLocalStorageFromBackend();
+  }
+  startAutoSync();
 }
 
 function saveModalLayoutMap(layouts) {
@@ -1060,10 +1460,14 @@ function deleteSavedModalLayout() {
 }
 
 function getSavedModalBlocksMap() {
+  if (!requireAdmin()) return sharedModalBlocksMap;
   try {
-    return JSON.parse(localStorage.getItem(MODAL_BLOCKS_STORAGE_KEY)) || {};
+    return {
+      ...sharedModalBlocksMap,
+      ...(JSON.parse(localStorage.getItem(MODAL_BLOCKS_STORAGE_KEY)) || {})
+    };
   } catch {
-    return {};
+    return sharedModalBlocksMap;
   }
 }
 
@@ -1675,6 +2079,8 @@ function setModalEditMode(isEditing) {
   if (!isEditing) {
     setDeleteMode(false);
     closeBlockLibrary();
+  } else {
+    sendPresence();
   }
 }
 
@@ -3031,6 +3437,7 @@ function showSettingsPage(pageName) {
     tab.classList.toggle('active', tab.dataset.settingsPage === pageName);
   });
   if (pageName === 'tags') renderSettingsTags();
+  if (pageName === 'creators') loadSteamCreators();
 }
 
 function openSettingsPanel() {
@@ -4182,8 +4589,11 @@ adminLoginForm.addEventListener('submit', async e => {
 });
 
 adminLogout.addEventListener('click', logoutAdmin);
-adminSyncLocal?.addEventListener('click', pushMissionDbMap);
+adminSyncLocal?.addEventListener('click', () => syncLocalStorageFromBackend());
 adminPushDb?.addEventListener('click', pushMissionDbMap);
+adminAutoSync?.addEventListener('change', e => {
+  setAutoSyncEnabled(e.target.checked);
+});
 adminPushReport?.addEventListener('click', () => {
   if (!adminPushReportPanel) return;
   adminPushReportPanel.hidden = !adminPushReportPanel.hidden;
@@ -4343,12 +4753,15 @@ searchInput.addEventListener('input', e => {
 // ═══════════════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════════════
-setAdminAuthenticated(false);
-refreshAdminSession();
-loadSavedTags();
-loadSavedMissionDb();
-renderImageBank();
-updatePendingPushUi();
-buildBoard();
-buildTimeline();
-buildPeopleBoard();
+async function initApp() {
+  setAdminAuthenticated(false);
+  await loadSharedMissionDbFromApi();
+  await refreshAdminSession();
+  renderImageBank();
+  updatePendingPushUi();
+  buildBoard();
+  buildTimeline();
+  buildPeopleBoard();
+}
+
+initApp();

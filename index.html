@@ -220,6 +220,7 @@
       <div class="settings-nav">
         <button class="settings-tab active" type="button" data-settings-page="tuto">Tuto</button>
         <button class="settings-tab" type="button" data-settings-page="tags" data-admin-only hidden>Tags</button>
+        <button class="settings-tab" type="button" data-settings-page="creators">Créateurs</button>
         <button class="settings-tab" type="button" data-settings-page="legal">Mentions légales</button>
         <button class="settings-tab" type="button" data-settings-page="login">Connexion</button>
       </div>
@@ -257,6 +258,12 @@
           <div id="settings-summary" class="settings-summary"></div>
           <div id="tag-summary-list" class="tag-summary-list"></div>
         </div>
+        <div id="settings-page-creators" class="settings-page">
+          <div class="settings-summary">Créateurs du site</div>
+          <div id="creator-grid" class="creator-grid" aria-live="polite">
+            <div class="creator-empty">Chargement des profils Steam...</div>
+          </div>
+        </div>
         <div id="settings-page-legal" class="settings-page">
           <div class="settings-summary">Mentions légales</div>
           <div class="legal-copy">
@@ -270,7 +277,7 @@
             </section>
             <section>
               <h3>Données personnelles</h3>
-              <p>Ce site ne collecte aucune donnée personnelle. Aucun cookie de traçage n'est utilisé. Les données saisies dans l'application sont stockées uniquement en local sur votre appareil et ne sont jamais transmises à un serveur.</p>
+              <p>Aucun cookie de traçage n'est utilisé. Les visiteurs lisent les données publiques du site ; les administrateurs disposent d'un cookie de session technique et peuvent envoyer leurs modifications au backend.</p>
             </section>
             <div class="tuto-card legal-highlight">
               <h3>Propriété intellectuelle</h3>
@@ -299,9 +306,14 @@
               <div class="admin-sync-panel">
                 <div class="admin-sync-title">Synchro / Push</div>
                 <div class="admin-sync-actions">
-                  <button id="admin-sync-local" class="control-btn" type="button">Sync backend</button>
+                  <button id="admin-sync-local" class="control-btn" type="button">Sync maintenant</button>
                   <button id="admin-push-db" class="control-btn danger" type="button">Push GitHub</button>
                 </div>
+                <label class="admin-sync-toggle">
+                  <input id="admin-auto-sync" type="checkbox">
+                  <span>Activer la synchro localStorage</span>
+                </label>
+                <div id="admin-sync-state" class="admin-sync-state">Synchro auto inactive</div>
                 <div id="admin-last-commit" class="admin-last-commit">Last commit : inconnu</div>
                 <div class="admin-push-status">
                   <span id="admin-pending-push">Aucune modification en attente</span>

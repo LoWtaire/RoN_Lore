@@ -52,6 +52,41 @@ async function getFile(path) {
   };
 }
 
+async function listJsonFiles(path) {
+  const config = getGithubConfig();
+  const octokit = createOctokit(config.token);
+
+  const response = await octokit.repos.getContent({
+    owner: config.owner,
+    repo: config.repo,
+    path,
+    ref: config.branch
+  });
+
+  if (!Array.isArray(response.data)) {
+    throw new Error("GitHub path does not point to a directory");
+  }
+
+  return response.data
+    .filter(item => item.type === "file" && item.name.endsWith(".json"))
+    .map(item => ({
+      name: item.name,
+      path: item.path,
+      sha: item.sha
+    }));
+}
+
+async function getJsonFiles(path) {
+  const files = await listJsonFiles(path);
+  const records = await Promise.all(files.map(file => getFile(file.path)));
+
+  return records.map(record => ({
+    path: record.path,
+    sha: record.sha,
+    data: record.json
+  }));
+}
+
 async function updateJsonFile(path, data, commitMessage) {
   const config = getGithubConfig();
   const octokit = createOctokit(config.token);
@@ -103,4 +138,4 @@ async function getLatestCommit() {
   };
 }
 
-export { getFile, getLatestCommit, updateJsonFile };
+export { getFile, getJsonFiles, getLatestCommit, listJsonFiles, updateJsonFile };
