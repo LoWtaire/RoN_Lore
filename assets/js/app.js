@@ -302,6 +302,10 @@ let autoSyncTimer = null;
 let isSyncingFromBackend = false;
 let presenceTimer = null;
 let lastPresenceText = '';
+let creatorMaskImage = null;
+let creatorMaskCanvas = null;
+let creatorMaskContext = null;
+let creatorHighlightUrls = null;
 
 function getApiUrl(path) {
   return `${API_BASE_URL}${path}`;
@@ -570,10 +574,335 @@ function getCreatorPresenceClass(creator) {
   return getSteamStatusClass(creator.status);
 }
 
+function getCreatorCallsign(creator, index) {
+  const source = (creator.name || creator.role || `Agent ${index + 1}`).trim();
+  return source.split(/\s+/)[0].replace(/[^a-z0-9_-]/gi, '') || `Agent ${index + 1}`;
+}
+
+function getCreatorRegistryNumber(creator, index) {
+  if (creator.steamId) return String(creator.steamId);
+  return `STEAM-ID-${String(index + 1).padStart(5, '0')}`;
+}
+
+function getCreatorNameParts(creator, index) {
+  const fallback = getCreatorCallsign(creator, index);
+  const rawName = (creator.name || fallback).trim();
+  const parts = rawName.split(/\s+/).filter(Boolean);
+  return {
+    lastName: parts.length > 1 ? parts.slice(1).join(' ') : rawName,
+    firstName: parts.length > 1 ? parts[0] : fallback,
+    callsign: getCreatorCallsign(creator, index)
+  };
+}
+
+function getCreatorAssignment(index) {
+  return index === 0 ? 'Commandement RoN Lore' : 'Division Integrite Operationnelle';
+}
+
+function getCreatorMissionNames() {
+  return DATA.flatMap(dlc => dlc.missions.map(item => item.name)).filter(name => !/^SecretEnd/i.test(name));
+}
+
+function createCreatorRedaction(text, className = '') {
+  const mark = document.createElement('span');
+  mark.className = `creator-redaction ${className}`.trim();
+  mark.textContent = text;
+  return mark;
+}
+
+function createCreatorTypeLine(label, value) {
+  const line = document.createElement('div');
+  line.className = 'creator-type-line';
+  line.append(makeTextElement('span', 'creator-type-label', `${label} :`), value);
+  return line;
+}
+
+function createCreatorSteamIdLink(creator, index) {
+  const steamId = getCreatorRegistryNumber(creator, index);
+  const profileUrl = creator.profileUrl || (creator.steamId ? `https://steamcommunity.com/profiles/${creator.steamId}` : '');
+  if (!profileUrl) return document.createTextNode(steamId);
+
+  const link = document.createElement('a');
+  link.className = 'creator-steam-id-link';
+  link.href = profileUrl;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.textContent = steamId;
+  link.setAttribute('aria-label', `Ouvrir le profil Steam ${steamId}`);
+  return link;
+}
+
+function createCreatorDossierStamp() {
+  const stamp = document.createElement('img');
+  stamp.className = 'creator-dossier-stamp';
+  stamp.setAttribute('aria-hidden', 'true');
+  stamp.src = 'assets/creator-fisa.webp';
+  stamp.alt = '';
+  return stamp;
+}
+
+function getCreatorReadyOrNotPlaytimeLabel(creator) {
+  const minutes = Number(creator.readyOrNotPlaytimeMinutes);
+  if (!Number.isFinite(minutes) || minutes < 0) return 'N/A';
+  const hours = minutes / 60;
+  if (hours < 1) return `${minutes} min`;
+  return `${hours.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} h`;
+}
+
+function getDefaultCreators() {
+  return [
+    { name: 'LORIQUEEE', role: 'Createur RoN Lore', status: null, note: 'Conception, contenu et direction du dossier.' },
+    { name: 'AURUM', role: 'Createur RoN Lore', status: null, note: 'Recherche, soutien et verification des dossiers.' }
+  ];
+}
+
+function loadCreatorMask() {
+  if (creatorMaskImage) return creatorMaskImage;
+  creatorMaskImage = new Image();
+  creatorMaskImage.src = 'assets/creator-mask.webp';
+  creatorMaskImage.addEventListener('load', () => {
+    creatorMaskCanvas = document.createElement('canvas');
+    creatorMaskCanvas.width = creatorMaskImage.naturalWidth;
+    creatorMaskCanvas.height = creatorMaskImage.naturalHeight;
+    creatorMaskContext = creatorMaskCanvas.getContext('2d', { willReadFrequently: true });
+    creatorMaskContext.drawImage(creatorMaskImage, 0, 0);
+    creatorHighlightUrls = createCreatorHighlightUrls();
+    document.querySelectorAll('.creator-scene').forEach(scene => applyCreatorHighlightImages(scene));
+  });
+  return creatorMaskImage;
+}
+
+function createCreatorHighlightUrls() {
+  if (!creatorMaskCanvas || !creatorMaskContext) return null;
+  const width = creatorMaskCanvas.width;
+  const height = creatorMaskCanvas.height;
+  const source = creatorMaskContext.getImageData(0, 0, width, height);
+  const urls = [];
+
+  for (let index = 0; index < 2; index += 1) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    const output = context.createImageData(width, height);
+    const startX = index === 0 ? 0 : Math.floor(width / 2);
+    const endX = index === 0 ? Math.floor(width / 2) : width;
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = startX; x < endX; x += 1) {
+        const pixelIndex = (y * width + x) * 4;
+        const isWhite = source.data[pixelIndex] > 170 && source.data[pixelIndex + 1] > 170 && source.data[pixelIndex + 2] > 170;
+        if (!isWhite) continue;
+        output.data[pixelIndex] = 231;
+        output.data[pixelIndex + 1] = 76;
+        output.data[pixelIndex + 2] = 60;
+        output.data[pixelIndex + 3] = 54;
+      }
+    }
+
+    context.putImageData(output, 0, 0);
+    urls.push(canvas.toDataURL('image/png'));
+  }
+
+  return urls;
+}
+
+function applyCreatorHighlightImages(scene) {
+  if (!creatorHighlightUrls) return;
+  scene.querySelectorAll('.creator-mask-highlight').forEach((image, index) => {
+    image.src = creatorHighlightUrls[index] || '';
+  });
+}
+
+function getCreatorMaskPoint(scene, event) {
+  if (!creatorMaskImage?.complete || !creatorMaskContext) return null;
+  const rect = scene.getBoundingClientRect();
+  const front = scene.querySelector('.creator-layer.front');
+  const frontStyle = getComputedStyle(front);
+  const matrix = new DOMMatrixReadOnly(frontStyle.transform === 'none' ? undefined : frontStyle.transform);
+  const sceneRatio = rect.width / rect.height;
+  const maskRatio = creatorMaskImage.naturalWidth / creatorMaskImage.naturalHeight;
+  let renderedWidth = rect.width;
+  let renderedHeight = rect.height;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  if (sceneRatio > maskRatio) {
+    renderedWidth = rect.height * maskRatio;
+    offsetX = (rect.width - renderedWidth) / 2;
+  } else if (sceneRatio < maskRatio) {
+    renderedHeight = rect.width / maskRatio;
+    offsetY = (rect.height - renderedHeight) / 2;
+  }
+
+  const localX = event.clientX - rect.left - offsetX - matrix.m41;
+  const localY = event.clientY - rect.top - offsetY - matrix.m42;
+  if (localX < 0 || localY < 0 || localX > renderedWidth || localY > renderedHeight) return null;
+
+  return {
+    x: Math.floor((localX / renderedWidth) * creatorMaskImage.naturalWidth),
+    y: Math.floor((localY / renderedHeight) * creatorMaskImage.naturalHeight)
+  };
+}
+
+function getCreatorMaskHit(scene, event) {
+  const point = getCreatorMaskPoint(scene, event);
+  if (!point) return -1;
+  const pixel = creatorMaskContext.getImageData(point.x, point.y, 1, 1).data;
+  const isWhite = pixel[0] > 170 && pixel[1] > 170 && pixel[2] > 170;
+  if (!isWhite) return -1;
+  return point.x < creatorMaskImage.naturalWidth / 2 ? 0 : 1;
+}
+
 function renderCreatorFallback(message) {
   if (!creatorGrid) return;
   clearElement(creatorGrid);
   creatorGrid.appendChild(makeTextElement('div', 'creator-empty', message));
+}
+
+function openCreatorDossier(scene, creators, index) {
+  const creator = creators[index];
+  const dossier = scene.querySelector('.creator-dossier');
+  if (!creator || !dossier) return;
+
+  scene.querySelectorAll('.creator-hotspot').forEach((hotspot, hotspotIndex) => {
+    hotspot.classList.toggle('active', hotspotIndex === index);
+  });
+
+  const note = creator.note || 'Agent rattache au dossier RoN Lore.';
+  const identity = getCreatorNameParts(creator, index);
+  const missions = getCreatorMissionNames();
+  const missionSplit = Math.ceil(missions.length / 2);
+
+  dossier.innerHTML = '';
+  dossier.classList.add('open');
+  dossier.setAttribute('aria-hidden', 'false');
+  scene.classList.add('dossier-open');
+
+  const head = document.createElement('div');
+  head.className = 'creator-dossier-head';
+  const seal = document.createElement('img');
+  seal.className = 'creator-dossier-seal';
+  seal.setAttribute('aria-label', 'City of Los Suenos Police Department');
+  seal.src = 'assets/creator-lspd.webp';
+  seal.alt = 'City of Los Suenos';
+  const heading = makeTextElement('div', 'creator-dossier-name', 'LOS SUENOS POLICE DEPARTMENT');
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'creator-dossier-close';
+  close.setAttribute('aria-label', 'Fermer la fiche agent');
+  close.textContent = 'X';
+  close.addEventListener('click', () => {
+    dossier.classList.remove('open');
+    dossier.setAttribute('aria-hidden', 'true');
+    scene.classList.remove('dossier-open');
+    scene.querySelectorAll('.creator-hotspot').forEach(hotspot => hotspot.classList.remove('active'));
+  });
+  head.append(seal, heading, close);
+
+  const identityBlock = document.createElement('section');
+  identityBlock.className = 'creator-dossier-id';
+  const identityTop = document.createElement('div');
+  identityTop.className = 'creator-dossier-id-top';
+
+  const photoFrame = document.createElement('div');
+  photoFrame.className = 'creator-dossier-photo-frame';
+  const photo = document.createElement('img');
+  photo.className = 'creator-dossier-photo';
+  photo.src = creator.avatar || 'assets/ready_or_not_lore_logo.webp';
+  photo.alt = creator.name || 'Portrait agent';
+  photo.loading = 'lazy';
+  photoFrame.appendChild(photo);
+
+  const photoMeta = document.createElement('div');
+  photoMeta.className = 'creator-dossier-photo-meta';
+  photoMeta.append(
+    createCreatorTypeLine('Statut', document.createTextNode(getCreatorPresenceLabel(creator))),
+    createCreatorTypeLine('Heures en operation', document.createTextNode(getCreatorReadyOrNotPlaytimeLabel(creator)))
+  );
+  const mainFields = document.createElement('div');
+  mainFields.className = 'creator-dossier-main-fields';
+  mainFields.append(
+    createCreatorTypeLine('Nom', createCreatorRedaction(identity.lastName, 'short')),
+    createCreatorTypeLine('Prenom', createCreatorRedaction(identity.firstName)),
+    createCreatorTypeLine('Callsign', document.createTextNode(creator.name || identity.callsign)),
+    createCreatorTypeLine('ID', createCreatorSteamIdLink(creator, index)),
+    createCreatorTypeLine('Grade', document.createTextNode(index === 0 ? 'Lieutenant I' : 'Inspecteur')),
+    createCreatorTypeLine('Unite', createCreatorRedaction(getCreatorAssignment(index), 'wide'))
+  );
+
+  const sideFields = document.createElement('div');
+  sideFields.className = 'creator-dossier-side-fields';
+  sideFields.append(
+    createCreatorTypeLine('Taille', createCreatorRedaction('1.82 m', 'tiny')),
+    createCreatorTypeLine('Poids', createCreatorRedaction('N/A', 'tiny')),
+    createCreatorTypeLine('Groupe Sanguin', createCreatorRedaction('O+', 'tiny')),
+    createCreatorTypeLine('Observation', document.createTextNode('N/A'))
+  );
+
+  identityTop.append(photoFrame, mainFields, sideFields);
+  identityBlock.append(identityTop, photoMeta);
+
+  const cases = document.createElement('section');
+  cases.className = 'creator-dossier-section creator-dossier-cases';
+  cases.appendChild(makeTextElement('div', 'creator-dossier-section-title', 'Dossiers traites :'));
+  const caseGrid = document.createElement('div');
+  caseGrid.className = 'creator-case-grid';
+  [missions.slice(0, missionSplit), missions.slice(missionSplit)].forEach(group => {
+    const list = document.createElement('ul');
+    group.forEach(name => {
+      const item = document.createElement('li');
+      item.textContent = `${name} [S]`;
+      list.appendChild(item);
+    });
+    caseGrid.appendChild(list);
+  });
+  const classified = document.createElement('li');
+  classified.innerHTML = '<strong>[CLASSIFIED]</strong>';
+  caseGrid.lastElementChild?.appendChild(classified);
+  cases.appendChild(caseGrid);
+
+  const psych = document.createElement('section');
+  psych.className = 'creator-dossier-section creator-dossier-psych';
+  psych.append(
+    makeTextElement('div', 'creator-dossier-section-title', 'Rapport Psychologique - Acces FISA/R3'),
+    createCreatorTypeLine('Evaluateur', createCreatorRedaction('DIV-IO', 'short')),
+    makeTextElement('p', '', 'Profil conforme. Tolerance a l ambiguite morale au-dessus des seuils. Incidents anterieurs expurges sur demande FISA.'),
+    makeTextElement('p', '', `L agent coopere. Statut : ACTIF - ${creator.game ? 'DEPLOYE' : 'SURVEILLE'}`)
+  );
+
+  const foot = document.createElement('div');
+  foot.className = 'creator-dossier-foot';
+  const signature = document.createElement('div');
+  signature.className = 'creator-signature-block';
+  const signatureImage = document.createElement('img');
+  signatureImage.className = 'creator-signature';
+  signatureImage.src = 'assets/creator-ggl.webp';
+  signatureImage.alt = 'Signature responsable unite';
+  signature.append(
+    makeTextElement('div', '', 'Responsable d unite :'),
+    signatureImage,
+    createCreatorTypeLine('Date', createCreatorRedaction('__/__/____', 'date'))
+  );
+
+  const auth = document.createElement('div');
+  auth.className = 'creator-auth-block';
+  auth.append(
+    makeTextElement('div', '', 'Autorisation FISA :'),
+    createCreatorDossierStamp(),
+    createCreatorTypeLine('Ref', createCreatorRedaction(`FISA-${String(index + 7).padStart(3, '0')}`, 'short'))
+  );
+
+  foot.append(signature, auth);
+
+  const watermark = document.createElement('img');
+  watermark.className = 'creator-dossier-watermark';
+  watermark.src = 'assets/creator-fisa.webp';
+  watermark.alt = '';
+  watermark.setAttribute('aria-hidden', 'true');
+
+  dossier.append(head, watermark, createCreatorDossierStamp(), identityBlock, cases, psych, foot);
+  close.focus();
 }
 
 function renderSteamCreators(creators) {
@@ -605,22 +934,108 @@ function renderSteamCreators(creators) {
     body.append(name, role, status);
     if (creator.note) body.appendChild(makeTextElement('p', 'creator-note', creator.note));
 
-    const link = document.createElement('a');
-    link.className = 'creator-link';
-    link.href = creator.profileUrl || '#';
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.textContent = 'Profil Steam';
-
-    card.append(avatar, body, link);
+    card.append(avatar, body);
     creatorGrid.appendChild(card);
   });
+}
+
+function renderSteamCreatorsScene(creators) {
+  if (!creatorGrid) return;
+  clearElement(creatorGrid);
+  loadCreatorMask();
+
+  if (!creators.length) {
+    renderCreatorFallback('Aucun createur configure.');
+    return;
+  }
+
+  const scene = document.createElement('div');
+  scene.className = 'creator-scene';
+
+  const back = document.createElement('img');
+  back.className = 'creator-layer back';
+  back.src = 'assets/creator-back.webp';
+  back.alt = '';
+  back.setAttribute('aria-hidden', 'true');
+
+  const front = document.createElement('img');
+  front.className = 'creator-layer front';
+  front.src = 'assets/creator-front.webp';
+  front.alt = '';
+  front.setAttribute('aria-hidden', 'true');
+
+  const dossier = document.createElement('aside');
+  dossier.className = 'creator-dossier';
+  dossier.setAttribute('aria-hidden', 'true');
+
+  scene.append(back, front);
+
+  ['left', 'right'].forEach((side, index) => {
+    const highlight = document.createElement('img');
+    highlight.className = `creator-mask-highlight ${side}`;
+    highlight.alt = '';
+    highlight.setAttribute('aria-hidden', 'true');
+    if (creatorHighlightUrls?.[index]) highlight.src = creatorHighlightUrls[index];
+    scene.appendChild(highlight);
+  });
+
+  creators.slice(0, 2).forEach((creator, index) => {
+    const hotspot = document.createElement('button');
+    hotspot.type = 'button';
+    hotspot.className = `creator-hotspot ${index === 0 ? 'left' : 'right'}`;
+    hotspot.setAttribute('aria-label', `Ouvrir la fiche de ${creator.name || getCreatorCallsign(creator, index)}`);
+
+    const tag = makeTextElement('span', 'creator-tag', getCreatorCallsign(creator, index));
+    hotspot.appendChild(tag);
+    hotspot.addEventListener('focus', () => hotspot.classList.add('active'));
+    hotspot.addEventListener('blur', () => hotspot.classList.remove('active'));
+    hotspot.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      openCreatorDossier(scene, creators, index);
+    });
+
+    scene.appendChild(hotspot);
+  });
+
+  scene.appendChild(dossier);
+  applyCreatorHighlightImages(scene);
+  scene.addEventListener('pointermove', e => {
+    if (e.target.closest('.creator-dossier')) {
+      scene.classList.remove('hover-left', 'hover-right');
+      scene.style.cursor = '';
+      return;
+    }
+    const rect = scene.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width - 0.5) * 28;
+    const y = ((e.clientY - rect.top) / rect.height - 0.5) * 18;
+    scene.style.setProperty('--parallax-x', `${x}px`);
+    scene.style.setProperty('--parallax-y', `${y}px`);
+    const hitIndex = getCreatorMaskHit(scene, e);
+    scene.classList.toggle('hover-left', hitIndex === 0);
+    scene.classList.toggle('hover-right', hitIndex === 1);
+    scene.style.cursor = hitIndex >= 0 ? 'pointer' : '';
+  });
+  scene.addEventListener('click', e => {
+    if (e.target.closest('.creator-dossier')) return;
+    const hitIndex = getCreatorMaskHit(scene, e);
+    if (hitIndex < 0) return;
+    openCreatorDossier(scene, creators, hitIndex);
+  });
+  scene.addEventListener('pointerleave', () => {
+    scene.style.setProperty('--parallax-x', '0px');
+    scene.style.setProperty('--parallax-y', '0px');
+    scene.classList.remove('hover-left', 'hover-right');
+    scene.style.cursor = '';
+  });
+
+  creatorGrid.appendChild(scene);
 }
 
 async function loadSteamCreators() {
   if (!creatorGrid) return;
   if (!hasConfiguredApiBase()) {
-    renderCreatorFallback('Backend non configuré pour charger les profils Steam.');
+    renderSteamCreatorsScene(getDefaultCreators());
     return;
   }
 
@@ -633,9 +1048,10 @@ async function loadSteamCreators() {
     });
     if (!response.ok) throw new Error('Steam creators unavailable');
     const body = await response.json();
-    renderSteamCreators(body.creators || []);
+    renderSteamCreatorsScene(body.creators || []);
   } catch {
-    renderCreatorFallback('Profils Steam indisponibles pour le moment.');
+    renderSteamCreatorsScene(getDefaultCreators());
+    return;
   }
 }
 
@@ -3453,6 +3869,7 @@ function renderSettingsTags() {
 
 function showSettingsPage(pageName) {
   if (pageName === 'tags' && !requireAdmin()) pageName = 'tuto';
+  settingsPanel?.classList.toggle('creator-mode', pageName === 'creators');
   document.querySelectorAll('.settings-page').forEach(page => {
     page.classList.toggle('active', page.id === `settings-page-${pageName}`);
   });

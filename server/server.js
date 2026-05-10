@@ -89,6 +89,7 @@ let steamCreatorCache = {
   expiresAt: 0,
   data: null
 };
+const READY_OR_NOT_STEAM_APP_ID = 1144200;
 
 function requiredEnv(name) {
   const value = process.env[name];
@@ -213,6 +214,35 @@ async function fetchSteamPlayerSummaries(creators) {
   return new Map(players.map(player => [String(player.steamid), player]));
 }
 
+async function fetchSteamReadyOrNotPlaytimes(creators) {
+  const apiKey = process.env.STEAM_API_KEY;
+  const steamIds = creators.map(creator => creator.steamId).filter(Boolean);
+
+  if (!apiKey || steamIds.length === 0) {
+    return new Map();
+  }
+
+  const entries = await Promise.all(steamIds.map(async steamId => {
+    const url = new URL("https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/");
+    url.searchParams.set("key", apiKey);
+    url.searchParams.set("steamid", steamId);
+    url.searchParams.set("appids_filter[0]", String(READY_OR_NOT_STEAM_APP_ID));
+    url.searchParams.set("format", "json");
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) return [steamId, null];
+      const body = await response.json();
+      const game = body.response?.games?.find(item => Number(item.appid) === READY_OR_NOT_STEAM_APP_ID);
+      return [steamId, Number.isFinite(game?.playtime_forever) ? game.playtime_forever : null];
+    } catch {
+      return [steamId, null];
+    }
+  }));
+
+  return new Map(entries);
+}
+
 async function getSteamCreators() {
   const now = Date.now();
   if (steamCreatorCache.data && steamCreatorCache.expiresAt > now) {
@@ -220,7 +250,10 @@ async function getSteamCreators() {
   }
 
   const creators = await resolveSteamCreatorIds(getSteamCreatorsConfig());
-  const summaries = await fetchSteamPlayerSummaries(creators);
+  const [summaries, readyOrNotPlaytimes] = await Promise.all([
+    fetchSteamPlayerSummaries(creators),
+    fetchSteamReadyOrNotPlaytimes(creators)
+  ]);
   const data = creators.map(creator => {
     const steamProfile = summaries.get(creator.steamId) || {};
     const profileUrl = steamProfile.profileurl || creator.profileUrl || (
@@ -237,6 +270,7 @@ async function getSteamCreators() {
       status: Number.isInteger(steamProfile.personastate) ? steamProfile.personastate : null,
       game: steamProfile.gameextrainfo || "",
       gameId: steamProfile.gameid || "",
+      readyOrNotPlaytimeMinutes: readyOrNotPlaytimes.get(creator.steamId) ?? null,
       lastLogoff: steamProfile.lastlogoff ? new Date(steamProfile.lastlogoff * 1000).toISOString() : null
     };
   });
