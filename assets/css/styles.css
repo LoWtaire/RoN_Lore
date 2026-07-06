@@ -944,13 +944,17 @@
     grid-template-rows: auto minmax(0, 1fr);
   }
   #settings-panel.creator-mode {
-    width: fit-content;
+    width: min(1440px, calc(100vw - 48px));
     max-width: calc(100vw - 48px);
+    height: auto;
+    min-height: 0;
   }
   #settings-panel.creator-mode .settings-layout {
-    grid-template-columns: 190px auto;
-    width: fit-content;
+    grid-template-columns: 190px minmax(0, 1fr);
+    width: 100%;
     max-width: 100%;
+    height: auto;
+    min-height: 0;
   }
   .filter-head {
     display: flex;
@@ -1097,8 +1101,8 @@
     padding: 22px 24px 28px;
   }
   #settings-panel.creator-mode .settings-content {
-    width: auto;
-    max-width: calc(100vw - 238px);
+    width: 100%;
+    max-width: none;
     aspect-ratio: 16 / 9;
     overflow: hidden;
     padding: 0;
@@ -1250,8 +1254,10 @@
     width: 100%;
     height: 100%;
     object-fit: contain;
+    object-position: center bottom;
     opacity: 0;
     pointer-events: none;
+    transform: translate3d(calc(var(--parallax-x) * 0.28), calc(var(--parallax-y) * 0.18), 0);
     transition: opacity 0.12s;
   }
   .creator-scene.hover-left .creator-mask-highlight.left,
@@ -3411,6 +3417,10 @@
       border-left: none;
       border-right: none;
       border-radius: 0;
+    }
+    #settings-panel.creator-mode {
+      min-height: 100vh;
+      height: 100vh;
     }
     .filter-head,
     .filter-body { padding: 18px; }
