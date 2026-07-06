@@ -3061,12 +3061,20 @@ function makeImage(src, alt, className) {
   image.src = src;
   image.alt = alt;
   image.loading = 'lazy';
+  image.decoding = 'async';
   image.addEventListener('error', () => {
     image.style.display = 'none';
     const placeholder = image.nextElementSibling;
     if (placeholder) placeholder.style.display = 'flex';
   });
   return image;
+}
+
+function getMissionCardThumb(mission) {
+  const thumb = mission.cardThumb || mission.thumb || '';
+  if (!thumb.startsWith('assets/missions/')) return thumb;
+  const fileName = thumb.split('/').pop().replace(/\.[^.]+$/, '.webp');
+  return `assets/missions/thumbs/${fileName}`;
 }
 
 function parseMissionDate(dateText) {
@@ -3435,18 +3443,19 @@ function buildBoard(filter = '') {
       : missions;
 
     visibleMissions.forEach((mission, i) => {
+      const cardThumb = getMissionCardThumb(mission);
       const card = document.createElement('button');
       card.type = 'button';
       card.className = 'card';
       card.style.animationDelay = `${i * 0.04}s`;
       card.setAttribute('aria-label', `Open mission details: ${mission.name}`);
 
-      if (mission.thumb) {
-        card.appendChild(makeImage(mission.thumb, mission.name, 'card-thumb'));
+      if (cardThumb) {
+        card.appendChild(makeImage(cardThumb, mission.name, 'card-thumb'));
       }
 
       const placeholder = makeTextElement('div', 'card-thumb-placeholder', '[ NO IMAGE ]');
-      if (mission.thumb) placeholder.style.display = 'none';
+      if (cardThumb) placeholder.style.display = 'none';
       card.appendChild(placeholder);
 
       const cardBody = document.createElement('div');
@@ -5195,6 +5204,12 @@ searchInput.addEventListener('input', e => {
 // ═══════════════════════════════════════════════════════════════
 async function initApp() {
   setAdminAuthenticated(false);
+  renderImageBank();
+  updatePendingPushUi();
+  buildBoard();
+  buildTimeline();
+  buildPeopleBoard();
+
   await loadSharedMissionDbFromApi();
   await refreshAdminSession();
   renderImageBank();

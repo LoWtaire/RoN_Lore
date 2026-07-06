@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="frs">
+<html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Explorez la chronologie, les dossiers et les connexions narratives des missions de Ready or Not.">
 <meta name="ron-lore-api-base" content="https://ron-lore-backend.onrender.com">
 <meta name="ron-lore-admin-origin" content="https://admin.ron-lore.online">
 <!-- Discord and social preview metadata. Keep image and URL absolute for crawler compatibility. -->
@@ -19,16 +20,18 @@
 <meta name="twitter:image" content="https://ron-lore.online/og-preview.png">
 <title>Ready Or Not - Lore</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 <body>
 
 <div id="hero">
-  <img id="hero-img" src="https://cdn2.steamgriddb.com/hero_thumb/6c465ed53d17739467c95fe414d8e056.jpg" alt="Ready Or Not">
-  <img id="hero-logo" src="assets/ready_or_not_lore_logo.webp" alt="Ready Or Not Lore">
+  <img id="hero-img" src="https://cdn2.steamgriddb.com/hero_thumb/6c465ed53d17739467c95fe414d8e056.jpg" alt="Ready Or Not" fetchpriority="high" decoding="async">
+  <img id="hero-logo" src="assets/ready_or_not_lore_logo.webp" alt="Ready Or Not Lore" decoding="async">
 </div>
 
+<main id="main-content">
 <div id="header">
   <div id="search-wrap">
     <input id="search" type="text" placeholder="SEARCH MISSIONS..." autocomplete="off">
@@ -72,6 +75,7 @@
   </div>
   <div id="people-grid" class="people-grid"></div>
 </section>
+</main>
 
 <!-- MODAL -->
 <div id="modal-bg" aria-hidden="true">
