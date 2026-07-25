@@ -22,9 +22,132 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/styles.css">
+<link rel="stylesheet" href="assets/css/archive-ui.css">
 </head>
 <body>
+
+<div id="archive-app" class="archive-app">
+  <header class="archive-topbar">
+    <a class="archive-brand" href="#reports" aria-label="Accueil des archives LSPD">
+      <img src="assets/creator-lspd.webp" alt="" class="archive-brand-mark">
+      <span><strong>LOS SUEÑOS POLICE DEPARTMENT</strong><small>ARCHIVES DES OPÉRATIONS</small></span>
+    </a>
+    <nav class="archive-nav" aria-label="Navigation principale">
+      <button type="button" data-archive-tab="dashboard">Tableau de bord</button>
+      <button type="button" data-archive-tab="reports" class="active">Rapports</button>
+      <button type="button" data-archive-tab="people">Personnes</button>
+      <button type="button" data-archive-tab="evidence">Preuves</button>
+    </nav>
+    <label class="archive-search">
+      <span class="sr-only">Rechercher dans les archives</span>
+      <input id="archive-search" type="search" placeholder="Rechercher dans les archives…" autocomplete="off">
+      <span class="material-symbols-outlined" aria-hidden="true">search</span>
+    </label>
+    <button id="archive-settings" class="archive-icon-button" type="button" aria-label="Ouvrir les paramètres">
+      <span class="material-symbols-outlined" aria-hidden="true">settings</span>
+    </button>
+    <div class="archive-agent-switcher">
+      <button id="archive-agent-toggle" class="archive-agent-toggle" type="button" aria-haspopup="listbox" aria-expanded="false">
+        <span class="archive-agent-avatar material-symbols-outlined" aria-hidden="true">badge</span>
+        <span class="archive-user"><strong id="archive-agent-name">AGT. LORIQUEEE</strong><small id="archive-agent-unit">CRÉATEUR · RON LORE</small></span>
+        <span class="material-symbols-outlined archive-agent-chevron" aria-hidden="true">expand_more</span>
+      </button>
+      <div id="archive-agent-menu" class="archive-agent-menu" role="listbox" aria-label="Sélectionner l’agent connecté" hidden></div>
+    </div>
+  </header>
+
+  <div class="archive-workspace">
+    <aside id="archive-module-sidebar" class="archive-module-sidebar">
+      <div class="archive-browser-heading"><span class="archive-eyebrow">Système LSPD</span><h1 id="archive-module-sidebar-title">Module</h1></div>
+      <nav id="archive-module-nav" class="archive-module-nav" aria-label="Navigation du module"></nav>
+    </aside>
+
+    <main id="archive-module-main" class="archive-module-main" tabindex="-1"></main>
+
+    <aside id="archive-browser-sidebar" class="archive-browser-sidebar">
+      <div class="archive-browser-heading">
+        <span class="archive-eyebrow">Classement des archives</span>
+        <h1>Rapports de mission</h1>
+      </div>
+      <nav id="archive-tree" class="archive-tree" aria-label="Arborescence des rapports"></nav>
+    </aside>
+
+    <main id="archive-browser-main" class="archive-browser-main">
+      <header class="archive-browser-header">
+        <div><span class="archive-eyebrow">Archives opérationnelles</span><h1 id="archive-browser-title">Toutes les missions</h1><p id="archive-browser-description">Rapports classés par campagne et extension.</p></div>
+        <div class="archive-browser-summary"><strong id="archive-browser-count">0</strong><span>rapports enregistrés</span></div>
+      </header>
+      <div class="archive-list-head" aria-hidden="true"><span>N° de rapport</span><span>Mission</span><span>Collection</span><span>Date de l’opération</span><span>Statut</span></div>
+      <div id="archive-report-list" class="archive-report-list"></div>
+    </main>
+
+    <aside class="archive-sidebar">
+      <button class="archive-back" type="button"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span> Retour aux rapports</button>
+      <section class="archive-case-summary" aria-labelledby="archive-operation-label">
+        <div id="archive-operation-label" class="archive-eyebrow">Opération</div>
+        <h1 id="archive-side-title">Thank You, Come Again</h1>
+        <dl>
+          <div><dt>ID d’opération</dt><dd id="archive-side-id">LS-2026-07-24-TYCA</dd></div>
+          <div><dt>Date</dt><dd id="archive-side-date">24 juillet 2026</dd></div>
+          <div><dt>Statut</dt><dd id="archive-side-status"><span class="archive-status-dot closed"></span> Clôturée</dd></div>
+        </dl>
+        <div class="archive-classification">Confidentiel · LSPD</div>
+      </section>
+      <section class="archive-related" aria-labelledby="archive-related-title">
+        <div class="archive-section-heading"><h2 id="archive-related-title">Opérations liées</h2><span id="archive-related-count">3</span></div>
+        <div id="archive-mission-list" class="archive-mission-list"></div>
+      </section>
+      <div class="archive-parent"><span>Dossier parent</span><strong>LOS SUEÑOS NARCOTICS INVESTIGATION</strong><small>LSNI-2026-0047</small></div>
+    </aside>
+
+    <main class="archive-main" id="archive-main-content">
+      <div class="archive-viewer-toolbar">
+        <strong>Affichage du rapport</strong>
+        <div><span>Page</span><button id="archive-page-control" type="button" title="Page suivante">1</button><span>/ 6</span><span class="archive-tool-divider"></span><button id="archive-zoom-control" type="button">100%</button><button id="archive-print-control" type="button"><span class="material-symbols-outlined" aria-hidden="true">print</span> Imprimer</button><button id="archive-toolbar-export" type="button"><span class="material-symbols-outlined" aria-hidden="true">download</span> Exporter</button></div>
+        <button id="archive-fit-control" type="button"><span class="material-symbols-outlined" aria-hidden="true">fit_screen</span> Ajuster à la largeur</button>
+      </div>
+
+      <div class="archive-pdf-viewport" aria-label="Lecteur du rapport PDF">
+      <article class="archive-report" aria-labelledby="archive-report-title">
+        <header class="archive-report-header">
+          <div class="archive-report-brand"><img src="assets/creator-lspd.webp" alt="Sceau de la ville de Los Sueños" class="archive-seal"><div><h2>LOS SUEÑOS POLICE DEPARTMENT</h2><p>RAPPORT D’OPÉRATION OFFICIEL</p></div></div>
+          <div class="archive-confidential">CONFIDENTIEL · LSPD<small>DIFFUSION RESTREINTE</small></div>
+          <dl class="archive-report-id"><div><dt>ID d’opération</dt><dd id="archive-report-id">LS-2026-07-24-TYCA</dd></div><div><dt>Date du rapport</dt><dd>24 juillet 2026</dd></div><div><dt>Pages</dt><dd>1 de 6</dd></div></dl>
+        </header>
+
+        <div class="archive-report-grid">
+          <section><h3>1. Résumé de l’opération</h3><p id="archive-summary">Intervention tactique menée suite à des informations faisant état d’activités liées au trafic de stupéfiants et au blanchiment d’argent. L’objectif était de sécuriser les lieux, appréhender les suspects et collecter des preuves exploitables.</p></section>
+          <section><h3>4. Résultats</h3><table><tbody><tr><th>Suspects appréhendés</th><td id="archive-suspect-count">18</td></tr><tr><th>Civils sécurisés</th><td id="archive-civilian-count">11</td></tr><tr><th>Aucune victime</th><td>0</td></tr><tr><th>Officiers blessés</th><td>0</td></tr><tr><th>Preuves saisies</th><td>Oui</td></tr></tbody></table></section>
+          <section><h3>2. Lieu</h3><div class="archive-form-row"><span>Établissement</span><strong id="archive-location-name">Thank You, Come Again</strong><span>Adresse</span><strong>3761 Strawberry Ave, Los Sueños, LS 90037</strong></div></section>
+          <section><h3>5. Classification & diffusion</h3><div class="archive-form-row"><span>Niveau</span><strong class="archive-red">Confidentiel · LSPD</strong><span>Diffusion</span><strong>Restreinte aux unités autorisées et au parquet.</strong></div></section>
+          <section><h3>3. Unités engagées</h3><ul><li>LSPD SWAT — Équipe Alpha-2</li><li>LSPD Narcotics Division — Équipe d’appui</li><li>LSPD Patrol — Périmètre et circulation</li></ul></section>
+          <section class="archive-approval"><h3>6. Approbation</h3><p>Superviseur : <strong>Cmdr. Elias Porter</strong><span class="archive-signature">E. Porter</span></p><p>Date : <strong>24/07/2026</strong></p></section>
+          <section class="archive-evidence-section"><h3>7. Synthèse des preuves principales</h3><div id="archive-evidence-strip" class="archive-evidence-strip"></div></section>
+          <aside class="archive-custody"><h3>Chaîne de possession</h3><p>Saisi par<br><strong>Ofc. D. Harper #4587</strong><br>24/07/2026 03:12</p><span>↓</span><p>Transféré à<br><strong>Det. L. Martinez #7142</strong><br>24/07/2026 05:48</p><span>↓</span><p>Entreposé<br><strong>Evidence Unit · Locker 12</strong></p><p class="archive-red">Sous scellé</p></aside>
+        </div>
+      </article>
+
+      <section class="archive-timeline" aria-labelledby="archive-timeline-title">
+        <h2 id="archive-timeline-title">8. Relations & chronologie</h2>
+        <div id="archive-timeline-cards" class="archive-timeline-cards"></div>
+      </section>
+      <section class="archive-pdf-blank" aria-label="Page 3"><strong>PAGE 3</strong><span>AUCUNE DONNÉE INDEXÉE</span></section>
+      <section class="archive-pdf-blank" aria-label="Page 4"><strong>PAGE 4</strong><span>AUCUNE DONNÉE INDEXÉE</span></section>
+      <section class="archive-pdf-blank" aria-label="Page 5"><strong>PAGE 5</strong><span>AUCUNE DONNÉE INDEXÉE</span></section>
+      <section class="archive-pdf-blank" aria-label="Page 6"><strong>PAGE 6</strong><span>AUCUNE DONNÉE INDEXÉE</span></section>
+      </div>
+    </main>
+  </div>
+
+  <footer class="archive-actions">
+    <div><strong>LSPD · SYSTÈME D’ARCHIVES DES OPÉRATIONS</strong><small>VERSION 2.7.4</small></div>
+    <button id="archive-open-evidence" type="button"><span class="material-symbols-outlined" aria-hidden="true">folder_open</span> Consulter les preuves</button>
+    <button id="archive-return" type="button"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span> Retour aux rapports</button>
+    <button id="archive-export" type="button"><span class="material-symbols-outlined" aria-hidden="true">download</span> Exporter le rapport</button>
+  </footer>
+</div>
 
 <div id="hero">
   <img id="hero-img" src="https://cdn2.steamgriddb.com/hero_thumb/6c465ed53d17739467c95fe414d8e056.jpg" alt="Ready Or Not" fetchpriority="high" decoding="async">
@@ -228,59 +351,24 @@
     <div class="filter-head">
       <div>
         <div id="settings-title" class="filter-title">Paramètres</div>
-        <div class="filter-subtitle">Gestion des tags</div>
+        <div class="filter-subtitle">Préférences et administration du système</div>
       </div>
-      <button id="settings-close" class="control-btn" type="button">Fermer</button>
+      <button id="settings-close" class="control-btn" type="button"><span class="material-symbols-outlined" aria-hidden="true">close</span> Fermer</button>
     </div>
     <div class="settings-layout">
       <div class="settings-nav">
-        <button class="settings-tab active" type="button" data-settings-page="tuto">Tuto</button>
-        <button class="settings-tab" type="button" data-settings-page="tags" data-admin-only hidden>Tags</button>
-        <button class="settings-tab" type="button" data-settings-page="creators">Créateurs</button>
-        <button class="settings-tab" type="button" data-settings-page="legal">Mentions légales</button>
-        <button class="settings-tab" type="button" data-settings-page="login">Connexion</button>
+        <div class="settings-nav-label">Configuration</div>
+        <button class="settings-tab" type="button" data-settings-page="tags" data-admin-only hidden><span class="material-symbols-outlined" aria-hidden="true">sell</span> Tags</button>
+        <button class="settings-tab active" type="button" data-settings-page="legal"><span class="material-symbols-outlined" aria-hidden="true">gavel</span> Mentions légales</button>
+        <div class="settings-nav-label">Accès système</div>
+        <button class="settings-tab" type="button" data-settings-page="login"><span class="material-symbols-outlined" aria-hidden="true">admin_panel_settings</span> Connexion</button>
       </div>
       <div class="settings-content">
-        <div id="settings-page-tuto" class="settings-page active">
-          <div class="settings-summary">Guide rapide des interactions</div>
-          <div class="tuto-grid">
-            <div class="tuto-card">
-              <h3>Navigation</h3>
-              <p>Clique sur une carte mission pour ouvrir sa fiche détaillée. La touche Escape ferme les panneaux et les modals ouverts.</p>
-            </div>
-            <div class="tuto-card">
-              <h3>Recherche</h3>
-              <p>La recherche filtre par nom de mission, tag ou texte de brief. Elle se combine avec les filtres avancés.</p>
-            </div>
-            <div class="tuto-card">
-              <h3>Filtres</h3>
-              <p>Le bouton Filtre permet de cocher des tags. Le mode OU garde les cartes avec au moins un tag, le mode ET exige tous les tags cochés.</p>
-            </div>
-            <div class="tuto-card" data-admin-only hidden>
-              <h3>Tags</h3>
-              <p>Dans une fiche mission, + Ajouter un tag permet de choisir un tag existant ou d'en créer un nouveau. Clic droit sur un tag pour le retirer.</p>
-            </div>
-            <div class="tuto-card" data-admin-only hidden>
-              <h3>Gestion</h3>
-              <p>Dans Paramètres > Tags, le crayon renomme un tag et change sa couleur. La poubelle supprime le tag partout après confirmation.</p>
-            </div>
-            <div class="tuto-card" data-admin-only hidden>
-              <h3>Couleurs</h3>
-              <p>Tu peux utiliser une couleur prédéfinie ou le sélecteur libre. Le bouton ⇩ enregistre une couleur custom dans les emplacements disponibles.</p>
-            </div>
-          </div>
-        </div>
         <div id="settings-page-tags" class="settings-page" data-admin-only hidden>
           <div id="settings-summary" class="settings-summary"></div>
           <div id="tag-summary-list" class="tag-summary-list"></div>
         </div>
-        <div id="settings-page-creators" class="settings-page">
-          <div class="settings-summary">Créateurs du site</div>
-          <div id="creator-grid" class="creator-grid" aria-live="polite">
-            <div class="creator-empty">Chargement des profils Steam...</div>
-          </div>
-        </div>
-        <div id="settings-page-legal" class="settings-page">
+        <div id="settings-page-legal" class="settings-page active">
           <div class="settings-summary">Mentions légales</div>
           <div class="legal-copy">
             <section>
@@ -434,6 +522,34 @@
   </div>
 </div>
 
+<div id="archive-print-bg" aria-hidden="true">
+  <section id="archive-print-dialog" role="dialog" aria-modal="true" aria-labelledby="archive-print-title">
+    <header><span class="material-symbols-outlined" aria-hidden="true">print</span><div><h2 id="archive-print-title">Impression sécurisée LSPD</h2><p>SERVICE CENTRAL D’IMPRESSION · RÉSEAU INTERNE</p></div><button id="archive-print-close" type="button" aria-label="Fermer">×</button></header>
+    <div class="archive-print-layout">
+      <div class="archive-print-preview"><div><img src="assets/creator-lspd.webp" alt=""><strong>RAPPORT D’OPÉRATION</strong><span>APERÇU CLASSIFIÉ</span></div><small>1 / 6</small></div>
+      <form id="archive-print-form">
+        <label for="archive-printer">Imprimante</label>
+        <select id="archive-printer"><option>LSPD-HQ-PRINT-03 · Ricoh IM C4500</option><option>LSPD-SECURE-02 · Xerox AltaLink C8155</option><option>EVIDENCE-ROOM-HP-M607</option><option>Microsoft Print to PDF</option></select>
+        <div class="archive-print-device"><span class="archive-status-dot closed"></span><div><strong>Prête</strong><small>Réseau interne · Bac A4 · Recto verso</small></div></div>
+        <label for="archive-print-pages">Pages</label><select id="archive-print-pages"><option>Toutes les pages (1–6)</option><option>Page actuelle</option><option>Pages 1–2</option></select>
+        <label for="archive-print-copies">Copies</label><input id="archive-print-copies" type="number" min="1" max="9" value="1">
+        <label class="archive-print-check"><input type="checkbox" checked> Ajouter le filigrane CONFIDENTIEL</label>
+        <div class="archive-print-actions"><button id="archive-print-cancel" type="button">Annuler</button><button type="submit"><span class="material-symbols-outlined" aria-hidden="true">print</span> Lancer l’impression</button></div>
+      </form>
+    </div>
+    <section id="archive-print-sent" aria-live="polite">
+      <div class="archive-print-sent-icon"><span class="material-symbols-outlined" aria-hidden="true">print_connect</span><i class="material-symbols-outlined" aria-hidden="true">check</i></div>
+      <span class="archive-print-sent-kicker">SERVICE CENTRAL D’IMPRESSION</span>
+      <h3>IMPRESSION ENVOYÉE</h3>
+      <p>Le rapport a été transmis à la file d’impression sécurisée.</p>
+      <dl><div><dt>Numéro du travail</dt><dd id="archive-print-job">LS-000000</dd></div><div><dt>Destination</dt><dd id="archive-print-destination">LSPD-HQ-PRINT-03</dd></div><div><dt>État</dt><dd><span class="archive-status-dot"></span> EN ATTENTE DE LIBÉRATION</dd></div></dl>
+      <div class="archive-print-release"><span class="material-symbols-outlined" aria-hidden="true">badge</span><p><strong>Libération sécurisée requise</strong><small>Présentez votre badge sur l’imprimante sélectionnée pour lancer le tirage.</small></p></div>
+      <button id="archive-print-sent-close" type="button">Fermer</button>
+    </section>
+  </section>
+</div>
+
 <script src="assets/js/app.js"></script>
+<script src="assets/js/archive-ui.js"></script>
 </body>
 </html>

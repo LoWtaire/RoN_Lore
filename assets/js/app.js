@@ -1032,14 +1032,17 @@ function renderSteamCreatorsScene(creators) {
   creatorGrid.appendChild(scene);
 }
 
-async function loadSteamCreators() {
-  if (!creatorGrid) return;
+async function loadSteamCreators({ render = true } = {}) {
+  if (render && !creatorGrid) return;
   if (!hasConfiguredApiBase()) {
-    renderSteamCreatorsScene(getDefaultCreators());
+    const creators = getDefaultCreators();
+    window.__ronLoreSteamCreators = creators;
+    window.dispatchEvent(new CustomEvent('ron-lore:creators-loaded', { detail: creators }));
+    if (render) renderSteamCreatorsScene(creators);
     return;
   }
 
-  renderCreatorFallback('Chargement des profils Steam...');
+  if (render) renderCreatorFallback('Chargement des profils Steam...');
 
   try {
     const response = await fetch(getApiUrl('/creators/steam'), {
@@ -1048,9 +1051,15 @@ async function loadSteamCreators() {
     });
     if (!response.ok) throw new Error('Steam creators unavailable');
     const body = await response.json();
-    renderSteamCreatorsScene(body.creators || []);
+    const creators = body.creators || [];
+    window.__ronLoreSteamCreators = creators;
+    window.dispatchEvent(new CustomEvent('ron-lore:creators-loaded', { detail: creators }));
+    if (render) renderSteamCreatorsScene(creators);
   } catch {
-    renderSteamCreatorsScene(getDefaultCreators());
+    const creators = getDefaultCreators();
+    window.__ronLoreSteamCreators = creators;
+    window.dispatchEvent(new CustomEvent('ron-lore:creators-loaded', { detail: creators }));
+    if (render) renderSteamCreatorsScene(creators);
     return;
   }
 }
@@ -3877,7 +3886,7 @@ function renderSettingsTags() {
 }
 
 function showSettingsPage(pageName) {
-  if (pageName === 'tags' && !requireAdmin()) pageName = 'tuto';
+  if (pageName === 'tags' && !requireAdmin()) pageName = 'legal';
   settingsPanel?.classList.toggle('creator-mode', pageName === 'creators');
   document.querySelectorAll('.settings-page').forEach(page => {
     page.classList.toggle('active', page.id === `settings-page-${pageName}`);
@@ -3891,7 +3900,7 @@ function showSettingsPage(pageName) {
 
 function openSettingsPanel() {
   lastSettingsFocusedElement = document.activeElement;
-  showSettingsPage('tuto');
+  showSettingsPage('legal');
   settingsBg.classList.add('open');
   settingsBg.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
