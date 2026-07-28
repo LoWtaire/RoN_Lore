@@ -298,6 +298,7 @@ let sharedMissionDbMap = {};
 let sharedModalLayoutMap = {};
 let sharedModalBlocksMap = {};
 let currentEditorName = '';
+let csrfToken = '';
 let autoSyncTimer = null;
 let isSyncingFromBackend = false;
 let presenceTimer = null;
@@ -403,14 +404,18 @@ function updateAdminLoginUi() {
   }
 }
 
-function setAdminAuthenticated(authenticated) {
+function setAdminAuthenticated(authenticated, { allowRedirect = true } = {}) {
   const wasAdminAuthenticated = isAdminAuthenticated;
   isAdminAuthenticated = Boolean(authenticated);
-  if (!isAdminAuthenticated) currentEditorName = '';
+  if (!isAdminAuthenticated) {
+    currentEditorName = '';
+    csrfToken = '';
+  }
   document.body.classList.toggle('admin-authenticated', isAdminAuthenticated);
+  window.dispatchEvent(new CustomEvent('ron-lore:admin-changed', { detail: { authenticated: isAdminAuthenticated } }));
   updateAdminLoginUi();
 
-  if (isAdminAuthenticated) {
+  if (isAdminAuthenticated && allowRedirect) {
     redirectToAdminOrigin();
   }
 
@@ -454,7 +459,7 @@ function setAdminAuthenticated(authenticated) {
   if (!isAdminAuthenticated) {
     setModalEditMode(false);
     closeBlockLibrary();
-    if (document.querySelector('#settings-page-tags.active')) showSettingsPage('tuto');
+    if (document.querySelector('#settings-page-tags.active')) showSettingsPage('legal');
   }
 
   if (activeModalMission && activeModalDlc) {
@@ -479,6 +484,7 @@ async function refreshAdminSession() {
     if (!response.ok) throw new Error('Admin session unavailable');
     const session = await response.json();
     currentEditorName = session.editor?.name || '';
+    csrfToken = session.csrfToken || '';
     setAdminAuthenticated(session.authenticated === true);
   } catch {
     setAdminAuthenticated(false);
@@ -512,6 +518,7 @@ async function loginAdmin(password) {
 
   const session = await response.json();
   currentEditorName = session.editor?.name || '';
+  csrfToken = session.csrfToken || '';
   setAdminAuthenticated(session.authenticated === true);
 }
 
@@ -520,7 +527,7 @@ async function logoutAdmin() {
     await fetch(getApiUrl('/auth/logout'), {
       method: 'POST',
       credentials: 'include',
-      headers: { Accept: 'application/json' }
+      headers: { Accept: 'application/json', 'X-CSRF-Token': csrfToken }
     });
   } finally {
     setAdminAuthenticated(false);
@@ -1665,7 +1672,8 @@ async function pushMissionDb(missionDb) {
     credentials: 'include',
     headers: {
       Accept: 'application/json',
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrfToken
     },
     body: JSON.stringify(payload)
   });
@@ -1752,6 +1760,7 @@ async function refreshPresence() {
 
   try {
     const response = await fetch(getApiUrl('/presence'), {
+      credentials: 'include',
       headers: { Accept: 'application/json' },
       cache: 'no-store'
     });
@@ -1774,7 +1783,8 @@ async function sendPresence() {
       credentials: 'include',
       headers: {
         Accept: 'application/json',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken
       },
       body: JSON.stringify({
         missionId: activeModalMissionKey,
@@ -2284,19 +2294,20 @@ function readFileAsDataUrl(file) {
 }
 
 async function importImageBankFiles(files) {
-  const selectedFiles = [...files].filter(file => file.type === 'image/webp' || file.name.toLowerCase().endsWith('.webp'));
+  const selectedFiles = [...files].filter(file => ['image/png', 'image/jpeg', 'image/webp'].includes(file.type));
   if (selectedFiles.length === 0) return;
   const existing = getImageBankItems();
   for (const file of selectedFiles) {
-    const dataUrl = await readFileAsDataUrl(file);
     const defaultName = getUploadSafeName(file.name);
     const requestedName = await showImageNameDialog('Nommer l’image', defaultName);
     const name = String(requestedName || defaultName).trim() || defaultName;
+    const uploaded = await uploadManagedImage(file, 'reports', name);
     existing.unshift({
       id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name,
-      dataUrl,
-      type: 'image/webp',
+      dataUrl: uploaded.url || uploaded.path,
+      assetPath: uploaded.path || '',
+      type: `image/${uploaded.format || 'webp'}`,
       createdAt: new Date().toISOString()
     });
   }
@@ -3077,6 +3088,59 @@ function makeImage(src, alt, className) {
     if (placeholder) placeholder.style.display = 'flex';
   });
   return image;
+}
+
+async function uploadManagedImage(file, category, name) {
+  const allowedCategories = new Set(['evidence', 'people', 'reports']);
+  if (!file || !allowedCategories.has(category)) throw new Error('Catégorie d’image invalide.');
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('Format accepté : PNG, JPEG ou WEBP.');
+  if (file.size > 5 * 1024 * 1024) throw new Error('Image trop volumineuse : 5 Mo maximum.');
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => resolve(reader.result));
+    reader.addEventListener('error', () => reject(new Error('Lecture de l’image impossible.')));
+    reader.readAsDataURL(file);
+  });
+
+  if (window.location.protocol === 'file:' || !hasConfiguredApiBase()) {
+    return { url: dataUrl, path: '', format: file.type.split('/')[1], localOnly: true };
+  }
+  if (!requireAdmin() || !csrfToken) throw new Error('Session administrateur requise.');
+  const response = await fetch(getApiUrl(`/assets/${encodeURIComponent(category)}`), {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrfToken
+    },
+    body: JSON.stringify({ name, dataUrl })
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'Enregistrement de l’image impossible.');
+  return body;
+}
+
+function sanitizeBriefHtml(value) {
+  const template = document.createElement('template');
+  template.innerHTML = String(value || '');
+  const allowedTags = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'SPAN', 'DIV', 'UL', 'OL', 'LI']);
+  const elements = [...template.content.querySelectorAll('*')];
+
+  elements.forEach(element => {
+    if (!allowedTags.has(element.tagName)) {
+      element.replaceWith(...element.childNodes);
+      return;
+    }
+
+    const color = element.style.color;
+    [...element.attributes].forEach(attribute => element.removeAttribute(attribute.name));
+    if (color && (/^#[0-9a-f]{3,8}$/i.test(color) || /^rgba?\([\d\s,.%]+\)$/i.test(color))) {
+      element.style.color = color;
+    }
+  });
+
+  return template.innerHTML;
 }
 
 function getMissionCardThumb(mission) {
@@ -4358,7 +4422,7 @@ function renderStructuredEvidenceSection(body, evidence) {
 }
 
 function getBriefHtml(mission) {
-  if (mission.briefHtml) return mission.briefHtml;
+  if (mission.briefHtml) return sanitizeBriefHtml(mission.briefHtml);
   if (mission.brief) {
     const paragraph = document.createElement('p');
     paragraph.textContent = mission.brief;
@@ -4437,7 +4501,7 @@ function renderBriefCustomColorGrid() {
 
 function updateBriefContentFromEditor(editor) {
   if (!activeModalMission || !editor) return;
-  activeModalMission.briefHtml = editor.innerHTML;
+  activeModalMission.briefHtml = sanitizeBriefHtml(editor.innerHTML);
   activeModalMission.brief = editor.textContent.trim();
   syncActiveMissionDb();
 }

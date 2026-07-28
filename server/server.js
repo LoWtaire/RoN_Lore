@@ -6,11 +6,13 @@ import cookieParser from "cookie-parser";
 import bcrypt from "bcrypt";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
-import { getJsonFiles, getLatestCommit, updateJsonFile } from "./github-storage.js";
+import sanitizeHtml from "sanitize-html";
+import sharp from "sharp";
+import { getJsonFiles, getLatestCommit, updateBinaryFile, updateJsonFile } from "./github-storage.js";
 
 const PORT = process.env.PORT || 10000;
-const COOKIE_NAME = "ron_lore_session";
-const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+const COOKIE_NAME = process.env.NODE_ENV === "production" ? "__Host-ron_lore_session" : "ron_lore_session";
+const SESSION_TTL_SECONDS = 8 * 60 * 60;
 const SAFE_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const DEFAULT_FRONTEND_ORIGINS = [
   "https://ron-lore.online",
@@ -20,6 +22,7 @@ const DEFAULT_FRONTEND_ORIGINS = [
 ];
 
 const app = express();
+const activeSessions = new Map();
 
 function getAllowedFrontendOrigins() {
   const envOrigins = (process.env.FRONTEND_ORIGIN || "")
@@ -42,15 +45,23 @@ const corsOptions = {
     callback(null, allowedOrigins.includes(origin));
   },
   credentials: true,
-  allowedHeaders: ["Content-Type", "Accept"],
+  allowedHeaders: ["Content-Type", "Accept", "X-CSRF-Token"],
   methods: ["GET", "POST", "PUT", "OPTIONS"]
 };
 
 app.set("trust proxy", 1);
 app.use(helmet());
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
 app.use(cors(corsOptions));
+app.use((req, res, next) => {
+  const origin = req.get("Origin");
+  if (origin && !getAllowedFrontendOrigins().includes(origin)) {
+    res.status(403).json({ error: "Origin not allowed" });
+    return;
+  }
+  next();
+});
 app.options("*", cors(corsOptions));
 
 const loginLimiter = rateLimit({
@@ -62,25 +73,57 @@ const loginLimiter = rateLimit({
 });
 
 const loginSchema = z.object({
-  password: z.string().min(1)
-});
+  password: z.string().min(12).max(256)
+}).strict();
 
 const presenceSchema = z.object({
-  missionId: z.string().min(1),
-  title: z.string().optional(),
-  action: z.string().optional()
-});
+  missionId: z.string().min(1).max(120),
+  title: z.string().max(200).optional(),
+  action: z.enum(["editing", "viewing", "saving"]).optional()
+}).strict();
 
 const missionSchema = z
   .object({
-    id: z.string().min(1),
-    title: z.string().optional()
+    schema: z.literal("ron-lore-mission-db-v1").optional(),
+    id: z.string().regex(SAFE_NAME_PATTERN),
+    localId: z.string().max(200).optional(),
+    missionId: z.string().max(200).optional(),
+    title: z.string().max(200).optional(),
+    dlc: z.object({ id: z.string().max(100), name: z.string().max(200) }).strict().optional(),
+    date: z.string().max(40).optional(),
+    summary: z.string().max(20000).optional(),
+    summaryHtml: z.string().max(50000).optional(),
+    tags: z.array(z.string().max(60)).max(30).optional(),
+    people: z.object({
+      civilians: z.array(z.record(z.unknown())).max(100).optional(),
+      suspects: z.array(z.record(z.unknown())).max(100).optional()
+    }).strict().optional(),
+    evidence: z.array(z.record(z.unknown())).max(100).optional(),
+    notes: z.object({ freeform: z.string().max(50000).optional() }).strict().optional(),
+    visual: z.object({
+      sections: z.array(z.record(z.unknown())).max(100).optional(),
+      blocks: z.array(z.record(z.unknown())).max(200).optional()
+    }).strict().optional(),
+    ai: z.object({
+      facts: z.array(z.unknown()).max(100).optional(),
+      hypotheses: z.array(z.unknown()).max(100).optional(),
+      questions: z.array(z.unknown()).max(100).optional()
+    }).strict().optional(),
+    updatedBy: z.string().max(200).optional(),
+    updatedAt: z.string().max(50).optional(),
+    pushedAt: z.string().max(50).optional()
   })
-  .passthrough();
+  .strict();
 
 const jsonObjectSchema = z
   .record(z.unknown())
   .refine((value) => !Array.isArray(value), "Root JSON value must be an object");
+
+const assetUploadSchema = z.object({
+  name: z.string().min(1).max(120),
+  dataUrl: z.string().max(8_000_000)
+}).strict();
+const ASSET_CATEGORIES = new Set(["evidence", "people", "reports"]);
 
 const activePresence = new Map();
 const PRESENCE_TTL_MS = 30 * 1000;
@@ -304,14 +347,22 @@ function createSessionToken() {
 
 function createEditorSessionToken(editorName) {
   const now = Math.floor(Date.now() / 1000);
+  for (const [sessionId, expiresAt] of activeSessions.entries()) {
+    if (expiresAt <= now) activeSessions.delete(sessionId);
+  }
+  const sid = crypto.randomBytes(24).toString("base64url");
+  const csrf = crypto.randomBytes(24).toString("base64url");
   const payload = {
     editor: true,
     name: editorName,
+    sid,
+    csrf,
     iat: now,
     exp: now + SESSION_TTL_SECONDS
   };
   const encodedPayload = base64UrlJson(payload);
   const signature = sign(encodedPayload);
+  activeSessions.set(sid, payload.exp);
 
   return `${encodedPayload}.${signature}`;
 }
@@ -340,7 +391,7 @@ function getSessionPayload(token) {
   try {
     const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
     const now = Math.floor(Date.now() / 1000);
-    if (payload.editor === true && Number.isInteger(payload.exp) && payload.exp > now) {
+    if (payload.editor === true && typeof payload.sid === "string" && typeof payload.csrf === "string" && Number.isInteger(payload.exp) && payload.exp > now && activeSessions.get(payload.sid) === payload.exp) {
       return payload;
     }
     return null;
@@ -376,6 +427,23 @@ function requireEditor(req, res, next) {
   req.editor = {
     name: typeof session.name === "string" && session.name.trim() ? session.name.trim() : "Admin"
   };
+  req.editorSession = session;
+  next();
+}
+
+function requireCsrf(req, res, next) {
+  const supplied = req.get("X-CSRF-Token");
+  const expected = req.editorSession?.csrf;
+  if (!supplied || !expected) {
+    res.status(403).json({ error: "CSRF token required" });
+    return;
+  }
+  const suppliedBuffer = Buffer.from(supplied);
+  const expectedBuffer = Buffer.from(expected);
+  if (suppliedBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(suppliedBuffer, expectedBuffer)) {
+    res.status(403).json({ error: "Invalid CSRF token" });
+    return;
+  }
   next();
 }
 
@@ -395,6 +463,19 @@ function assertSafeName(value) {
 
 function commitSafeTitle(value) {
   return value.replace(/_/g, "-");
+}
+
+function sanitizeMissionPayload(payload) {
+  const clean = structuredClone(payload);
+  if (typeof clean.summaryHtml === "string") {
+    clean.summaryHtml = sanitizeHtml(clean.summaryHtml, {
+      allowedTags: ["p", "br", "strong", "b", "em", "i", "u", "s", "span", "div", "ul", "ol", "li"],
+      allowedAttributes: { "*": ["style"] },
+      allowedStyles: { "*": { color: [/^#[0-9a-f]{3,8}$/i, /^rgba?\([\d\s,.%]+\)$/i] } },
+      disallowedTagsMode: "discard"
+    });
+  }
+  return clean;
 }
 
 function asyncRoute(handler) {
@@ -446,7 +527,7 @@ app.get(
   })
 );
 
-app.get("/presence", (req, res) => {
+app.get("/presence", requireEditor, (req, res) => {
   const now = Date.now();
   const editors = [];
 
@@ -472,6 +553,7 @@ app.get("/presence", (req, res) => {
 app.post(
   "/presence",
   requireEditor,
+  requireCsrf,
   (req, res) => {
     const parsedPresence = presenceSchema.safeParse(req.body);
     if (!parsedPresence.success) {
@@ -514,12 +596,15 @@ app.post(
       return;
     }
 
-    res.cookie(COOKIE_NAME, createEditorSessionToken(authenticatedUser.name), sessionCookieOptions());
-    res.json({ authenticated: true, editor: { name: authenticatedUser.name } });
+    const token = createEditorSessionToken(authenticatedUser.name);
+    const session = getSessionPayload(token);
+    res.cookie(COOKIE_NAME, token, sessionCookieOptions());
+    res.json({ authenticated: true, csrfToken: session.csrf, editor: { name: authenticatedUser.name } });
   })
 );
 
-app.post("/auth/logout", (req, res) => {
+app.post("/auth/logout", requireEditor, requireCsrf, (req, res) => {
+  activeSessions.delete(req.editorSession.sid);
   res.clearCookie(COOKIE_NAME, {
     ...sessionCookieOptions(),
     maxAge: undefined
@@ -531,6 +616,7 @@ app.get("/auth/session", (req, res) => {
   const session = getSessionPayload(req.cookies[COOKIE_NAME]);
   res.json({
     authenticated: Boolean(session),
+    csrfToken: session?.csrf || null,
     editor: session ? { name: session.name || "Admin" } : null
   });
 });
@@ -547,6 +633,7 @@ app.get(
 app.put(
   "/data/missions/:id",
   requireEditor,
+  requireCsrf,
   asyncRoute(async (req, res) => {
     const id = assertSafeName(req.params.id);
     const parsedMission = missionSchema.safeParse(req.body);
@@ -556,10 +643,11 @@ app.put(
       return;
     }
 
+    const safeMission = sanitizeMissionPayload(parsedMission.data);
     const result = await updateJsonFile(
       `data/missions/${id}.json`,
       {
-        ...parsedMission.data,
+        ...safeMission,
         updatedBy: req.editor.name,
         updatedAt: new Date().toISOString()
       },
@@ -573,6 +661,7 @@ app.put(
 app.put(
   "/data/entities/:file",
   requireEditor,
+  requireCsrf,
   asyncRoute(async (req, res) => {
     const file = assertSafeName(req.params.file);
     const parsedEntity = jsonObjectSchema.safeParse(req.body);
@@ -599,6 +688,7 @@ app.put(
 app.put(
   "/data/sources/:file",
   requireEditor,
+  requireCsrf,
   asyncRoute(async (req, res) => {
     const file = assertSafeName(req.params.file);
     const parsedSource = jsonObjectSchema.safeParse(req.body);
@@ -619,6 +709,49 @@ app.put(
     );
 
     res.json({ ok: true, path: result.path, commit: result.commit });
+  })
+);
+
+app.post(
+  "/assets/:category",
+  requireEditor,
+  requireCsrf,
+  asyncRoute(async (req, res) => {
+    const category = String(req.params.category || "");
+    if (!ASSET_CATEGORIES.has(category)) {
+      res.status(400).json({ error: "Invalid asset category" });
+      return;
+    }
+    const parsed = assetUploadSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid image payload" });
+      return;
+    }
+    const match = parsed.data.dataUrl.match(/^data:image\/(png|jpe?g|webp);base64,([a-z0-9+/=]+)$/i);
+    if (!match) {
+      res.status(415).json({ error: "Unsupported image format" });
+      return;
+    }
+    const input = Buffer.from(match[2], "base64");
+    if (!input.length || input.length > 5 * 1024 * 1024) {
+      res.status(413).json({ error: "Image exceeds the 5 MB limit" });
+      return;
+    }
+    const baseName = parsed.data.name
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || `asset-${Date.now()}`;
+    const output = await sharp(input, { failOn: "warning", limitInputPixels: 40_000_000 })
+      .rotate()
+      .resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 82, effort: 4 })
+      .toBuffer();
+    const path = `assets/${category}/${baseName}.webp`;
+    const result = await updateBinaryFile(path, output, `Upload ${category} asset ${baseName} from admin`);
+    res.status(201).json({ ok: true, path, url: result.downloadUrl, commit: result.commit, format: "webp", size: output.length });
   })
 );
 

@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://ron-lore-backend.onrender.com; object-src 'none'; base-uri 'self'; form-action 'self' https://ron-lore-backend.onrender.com; upgrade-insecure-requests">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="description" content="Explorez la chronologie, les dossiers et les connexions narratives des missions de Ready or Not.">
 <meta name="ron-lore-api-base" content="https://ron-lore-backend.onrender.com">
 <meta name="ron-lore-admin-origin" content="https://admin.ron-lore.online">
@@ -98,6 +100,10 @@
       <section class="archive-related" aria-labelledby="archive-related-title">
         <div class="archive-section-heading"><h2 id="archive-related-title">Opérations liées</h2><span id="archive-related-count">3</span></div>
         <div id="archive-mission-list" class="archive-mission-list"></div>
+        <div id="archive-related-editor" class="archive-related-editor" hidden>
+          <select id="archive-related-select" aria-label="Opération à lier"></select>
+          <button id="archive-related-add" type="button"><span class="material-symbols-outlined" aria-hidden="true">add_link</span> Ajouter</button>
+        </div>
       </section>
       <div class="archive-parent"><span>Dossier parent</span><strong>LOS SUEÑOS NARCOTICS INVESTIGATION</strong><small>LSNI-2026-0047</small></div>
     </aside>
@@ -105,7 +111,7 @@
     <main class="archive-main" id="archive-main-content">
       <div class="archive-viewer-toolbar">
         <strong>Affichage du rapport</strong>
-        <div><span>Page</span><button id="archive-page-control" type="button" title="Page suivante">1</button><span>/ 6</span><span class="archive-tool-divider"></span><button id="archive-zoom-control" type="button">100%</button><button id="archive-print-control" type="button"><span class="material-symbols-outlined" aria-hidden="true">print</span> Imprimer</button><button id="archive-toolbar-export" type="button"><span class="material-symbols-outlined" aria-hidden="true">download</span> Exporter</button></div>
+        <div><span>Page</span><button id="archive-page-control" type="button" title="Page suivante">1</button><span>/ 6</span><span class="archive-tool-divider"></span><button id="archive-zoom-control" type="button">100%</button><button id="archive-edit-control" type="button" data-admin-only hidden><span class="material-symbols-outlined" aria-hidden="true">edit_document</span> Éditer</button><button id="archive-print-control" type="button"><span class="material-symbols-outlined" aria-hidden="true">print</span> Imprimer</button><button id="archive-toolbar-export" type="button"><span class="material-symbols-outlined" aria-hidden="true">download</span> Exporter</button></div>
         <button id="archive-fit-control" type="button"><span class="material-symbols-outlined" aria-hidden="true">fit_screen</span> Ajuster à la largeur</button>
       </div>
 
@@ -118,32 +124,34 @@
         </header>
 
         <div class="archive-report-grid">
-          <section><h3>1. Résumé de l’opération</h3><p id="archive-summary">Intervention tactique menée suite à des informations faisant état d’activités liées au trafic de stupéfiants et au blanchiment d’argent. L’objectif était de sécuriser les lieux, appréhender les suspects et collecter des preuves exploitables.</p></section>
+          <section><h3>1. Briefing opérationnel</h3><p id="archive-summary">Intervention tactique menée suite à des informations faisant état d’activités liées au trafic de stupéfiants et au blanchiment d’argent. L’objectif était de sécuriser les lieux, appréhender les suspects et collecter des preuves exploitables.</p></section>
           <section><h3>4. Résultats</h3><table><tbody><tr><th>Suspects appréhendés</th><td id="archive-suspect-count">18</td></tr><tr><th>Civils sécurisés</th><td id="archive-civilian-count">11</td></tr><tr><th>Aucune victime</th><td>0</td></tr><tr><th>Officiers blessés</th><td>0</td></tr><tr><th>Preuves saisies</th><td>Oui</td></tr></tbody></table></section>
           <section><h3>2. Lieu</h3><div class="archive-form-row"><span>Établissement</span><strong id="archive-location-name">Thank You, Come Again</strong><span>Adresse</span><strong>3761 Strawberry Ave, Los Sueños, LS 90037</strong></div></section>
           <section><h3>5. Classification & diffusion</h3><div class="archive-form-row"><span>Niveau</span><strong class="archive-red">Confidentiel · LSPD</strong><span>Diffusion</span><strong>Restreinte aux unités autorisées et au parquet.</strong></div></section>
           <section><h3>3. Unités engagées</h3><ul><li>LSPD SWAT — Équipe Alpha-2</li><li>LSPD Narcotics Division — Équipe d’appui</li><li>LSPD Patrol — Périmètre et circulation</li></ul></section>
           <section class="archive-approval"><h3>6. Approbation</h3><p>Superviseur : <strong>Cmdr. Elias Porter</strong><span class="archive-signature">E. Porter</span></p><p>Date : <strong>24/07/2026</strong></p></section>
-          <section class="archive-evidence-section"><h3>7. Synthèse des preuves principales</h3><div id="archive-evidence-strip" class="archive-evidence-strip"></div></section>
           <aside class="archive-custody"><h3>Chaîne de possession</h3><p>Saisi par<br><strong>Ofc. D. Harper #4587</strong><br>24/07/2026 03:12</p><span>↓</span><p>Transféré à<br><strong>Det. L. Martinez #7142</strong><br>24/07/2026 05:48</p><span>↓</span><p>Entreposé<br><strong>Evidence Unit · Locker 12</strong></p><p class="archive-red">Sous scellé</p></aside>
         </div>
       </article>
 
-      <section class="archive-timeline" aria-labelledby="archive-timeline-title">
-        <h2 id="archive-timeline-title">8. Relations & chronologie</h2>
-        <div id="archive-timeline-cards" class="archive-timeline-cards"></div>
-      </section>
-      <section class="archive-pdf-blank" aria-label="Page 3"><strong>PAGE 3</strong><span>AUCUNE DONNÉE INDEXÉE</span></section>
-      <section class="archive-pdf-blank" aria-label="Page 4"><strong>PAGE 4</strong><span>AUCUNE DONNÉE INDEXÉE</span></section>
-      <section class="archive-pdf-blank" aria-label="Page 5"><strong>PAGE 5</strong><span>AUCUNE DONNÉE INDEXÉE</span></section>
-      <section class="archive-pdf-blank" aria-label="Page 6"><strong>PAGE 6</strong><span>AUCUNE DONNÉE INDEXÉE</span></section>
+      <section class="archive-timeline archive-entity-page" aria-labelledby="archive-civilians-page-title"><header class="archive-page-heading"><div><span>DOSSIER D’OPÉRATION · REGISTRE STRUCTURÉ</span><h2 id="archive-civilians-page-title">CIVILS ET VICTIMES</h2></div><strong>PAGE 2 / 6</strong></header><p class="archive-page-instruction">Identités civiles associées à l’intervention. Chaque emplacement accepte un portrait, un nom et une description.</p><div id="archive-report-civilians" class="archive-record-grid archive-entity-grid"></div></section>
+      <section class="archive-pdf-page archive-entity-page" aria-labelledby="archive-suspects-page-title"><header class="archive-page-heading"><div><span>DOSSIER D’OPÉRATION · REGISTRE STRUCTURÉ</span><h2 id="archive-suspects-page-title">SUSPECTS</h2></div><strong>PAGE 3 / 6</strong></header><p class="archive-page-instruction">Personnes recherchées, interpellées ou identifiées pendant l’opération.</p><div id="archive-report-suspects" class="archive-record-grid archive-entity-grid"></div></section>
+      <section class="archive-pdf-page" aria-labelledby="archive-evidence-page-title"><header class="archive-page-heading"><div><span>DOSSIER D’OPÉRATION</span><h2 id="archive-evidence-page-title">PREUVES ET SAISIES</h2></div><strong>PAGE 4 / 6</strong></header><div id="archive-evidence-strip" class="archive-evidence-strip archive-evidence-page-grid"></div><h3 class="archive-page-subtitle">CHAÎNE DE CONSERVATION</h3><div class="archive-fixed-fields three"><div><span>AGENT RESPONSABLE</span><strong>NON RENSEIGNÉ</strong></div><div><span>UNITÉ DE STOCKAGE</span><strong>EVIDENCE UNIT · LOCKER 12</strong></div><div><span>NUMÉRO DU SCELLÉ</span><strong>NON RENSEIGNÉ</strong></div></div><div class="archive-large-field"><span>OBSERVATIONS SUR LES PIÈCES</span><p>NON RENSEIGNÉ</p></div></section>
+      <section class="archive-pdf-page" aria-labelledby="archive-analysis-page-title"><header class="archive-page-heading"><div><span>DOSSIER D’OPÉRATION · NOTES STRUCTURÉES</span><h2 id="archive-analysis-page-title">CHRONOLOGIE ET NOTES</h2></div><strong>PAGE 5 / 6</strong></header><div class="archive-analysis-grid"><section><h3>SITUATION INITIALE</h3><p>NON RENSEIGNÉ</p></section><section><h3>MENACES IDENTIFIÉES</h3><p>NON RENSEIGNÉ</p></section><section><h3>MÉTHODE D’ENTRÉE</h3><p>NON RENSEIGNÉ</p></section><section><h3>ACTIONS DES UNITÉS</h3><p>NON RENSEIGNÉ</p></section><section><h3>USAGE DE LA FORCE</h3><p>NON RENSEIGNÉ</p></section><section><h3>INCIDENTS</h3><p>NON RENSEIGNÉ</p></section></div><h3 class="archive-page-subtitle">OPÉRATIONS ASSOCIÉES</h3><div id="archive-timeline-cards" class="archive-timeline-cards"></div></section>
+      <section class="archive-pdf-page" aria-labelledby="archive-admin-page-title"><header class="archive-page-heading"><div><span>DOSSIER D’OPÉRATION</span><h2 id="archive-admin-page-title">VALIDATION ADMINISTRATIVE</h2></div><strong>PAGE 6 / 6</strong></header><div class="archive-fixed-fields two"><div><span>CLASSIFICATION FINALE</span><strong>CONFIDENTIEL · LSPD</strong></div><div><span>DIFFUSION AUTORISÉE</span><strong>UNITÉS AUTORISÉES · PARQUET</strong></div><div><span>AGENT RÉDACTEUR</span><strong>NON RENSEIGNÉ</strong></div><div><span>SUPERVISEUR</span><strong>CMDR. ELIAS PORTER</strong></div><div><span>DATE DE VALIDATION</span><strong>24/07/2026</strong></div><div><span>VERSION DU DOCUMENT</span><strong>1.0 · ORIGINAL</strong></div></div><h3 class="archive-page-subtitle">DOCUMENTS ASSOCIÉS</h3><div class="archive-associated-docs"><div>ANNEXE A <span>NON RENSEIGNÉ</span></div><div>ANNEXE B <span>NON RENSEIGNÉ</span></div><div>RÉFÉRENCE FISA <span>AUCUNE</span></div></div><h3 class="archive-page-subtitle">HISTORIQUE DES MODIFICATIONS</h3><table class="archive-revision-table"><thead><tr><th>VERSION</th><th>DATE</th><th>AUTEUR</th><th>MODIFICATION</th></tr></thead><tbody><tr><td>1.0</td><td>24/07/2026</td><td>NON RENSEIGNÉ</td><td>CRÉATION DU RAPPORT</td></tr><tr><td>—</td><td>—</td><td>—</td><td>—</td></tr><tr><td>—</td><td>—</td><td>—</td><td>—</td></tr></tbody></table><div class="archive-signature-block"><div><span>SIGNATURE DU RÉDACTEUR</span></div><div><span>VISA DU SUPERVISEUR</span><strong class="archive-signature">E. Porter</strong></div></div></section>
       </div>
+      <input id="archive-document-image-input" class="sr-only" type="file" accept="image/png,image/jpeg,image/webp">
+      <aside id="archive-document-editor" aria-label="Banque de ressources du rapport" hidden>
+        <header><span>MODE ÉDITION</span><h2>Banque de ressources</h2></header>
+        <section><div class="archive-editor-section-head"><h3>BANQUE D’IMAGES</h3><button id="archive-resource-import" type="button">Importer</button><input id="archive-resource-input" class="sr-only" type="file" accept="image/png,image/jpeg,image/webp" multiple></div><div id="archive-resource-bank" class="archive-resource-bank"><p>AUCUNE IMAGE IMPORTÉE<small>Importer des fichiers PNG, JPG ou WEBP</small></p></div></section>
+        <section><div class="archive-editor-section-head"><h3>BANQUE DE BLOCS</h3></div><div class="archive-block-bank"><button type="button" data-document-block="text"><span class="material-symbols-outlined" aria-hidden="true">notes</span><strong>Zone de texte</strong><small>Compléter un champ vide</small></button><button type="button" data-document-block="civil"><span class="material-symbols-outlined" aria-hidden="true">person_add</span><strong>Civil / victime</strong><small>Page 3 · emplacement libre</small></button><button type="button" data-document-block="suspect"><span class="material-symbols-outlined" aria-hidden="true">person_alert</span><strong>Suspect</strong><small>Page 3 · emplacement libre</small></button><button type="button" data-document-block="evidence"><span class="material-symbols-outlined" aria-hidden="true">add_photo_alternate</span><strong>Preuve</strong><small>Page 4 · emplacement libre</small></button></div></section>
+        <footer><span>SAUVEGARDE AUTOMATIQUE LOCALE</span><button id="archive-editor-finish" type="button">Terminer l’édition</button></footer>
+      </aside>
     </main>
   </div>
 
   <footer class="archive-actions">
     <div><strong>LSPD · SYSTÈME D’ARCHIVES DES OPÉRATIONS</strong><small>VERSION 2.7.4</small></div>
-    <button id="archive-open-evidence" type="button"><span class="material-symbols-outlined" aria-hidden="true">folder_open</span> Consulter les preuves</button>
     <button id="archive-return" type="button"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span> Retour aux rapports</button>
     <button id="archive-export" type="button"><span class="material-symbols-outlined" aria-hidden="true">download</span> Exporter le rapport</button>
   </footer>
@@ -245,7 +253,7 @@
         <div class="editor-bank-head">
           <div id="image-bank-title" class="editor-bank-title">Banque d'images</div>
           <button id="image-bank-upload-btn" class="image-upload-btn" type="button">Importer</button>
-          <input id="image-bank-upload" class="image-bank-upload-input" type="file" accept="image/webp,.webp" multiple>
+          <input id="image-bank-upload" class="image-bank-upload-input" type="file" accept="image/png,image/jpeg,image/webp" multiple>
         </div>
         <div id="image-bank" class="image-bank" role="button" tabindex="0" aria-label="Importer des images WebP par clic ou glisser déposer"></div>
       </section>

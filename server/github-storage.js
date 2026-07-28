@@ -118,6 +118,35 @@ async function updateJsonFile(path, data, commitMessage) {
   };
 }
 
+async function updateBinaryFile(path, buffer, commitMessage) {
+  const config = getGithubConfig();
+  const octokit = createOctokit(config.token);
+  let sha;
+  try {
+    sha = (await getFile(path)).sha;
+  } catch (error) {
+    if (error?.status !== 404) throw error;
+  }
+
+  const response = await octokit.repos.createOrUpdateFileContents({
+    owner: config.owner,
+    repo: config.repo,
+    path,
+    branch: config.branch,
+    message: commitMessage,
+    content: buffer.toString("base64"),
+    ...(sha ? { sha } : {}),
+    author: { name: config.authorName, email: config.authorEmail },
+    committer: { name: config.authorName, email: config.authorEmail }
+  });
+
+  return {
+    path,
+    commit: response.data.commit.sha,
+    downloadUrl: response.data.content?.download_url || ""
+  };
+}
+
 async function getLatestCommit() {
   const config = getGithubConfig();
   const octokit = createOctokit(config.token);
@@ -138,4 +167,4 @@ async function getLatestCommit() {
   };
 }
 
-export { getFile, getJsonFiles, getLatestCommit, listJsonFiles, updateJsonFile };
+export { getFile, getJsonFiles, getLatestCommit, listJsonFiles, updateBinaryFile, updateJsonFile };
